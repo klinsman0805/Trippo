@@ -12,9 +12,13 @@ import '../../design/tokens.dart';
 /// `showTimePicker` everywhere put an Android clock face, in Material purple,
 /// on an iPhone.
 ///
-/// Both are set to 24 hours. Every time this app displays is 24-hour — 16:55,
-/// 18:45, a boarding pass — so offering an AM/PM picker asks the user to
-/// translate their own ticket on the way in.
+/// Both show 12-hour with AM/PM, which is how times are read aloud in the
+/// markets this is being built for.
+///
+/// The value returned is still 24-hour `HH:MM`. Storage and display formats
+/// are separate concerns: a picker is about how a person enters a time, and
+/// keeping one canonical form underneath means nothing downstream — sorting,
+/// the envelope, the API — has to parse an AM/PM string.
 ///
 /// Returns `HH:MM`, or null if dismissed.
 Future<String?> pickWayfareTime(
@@ -31,9 +35,9 @@ Future<String?> pickWayfareTime(
       context: context,
       initialTime: m.TimeOfDay(hour: hour, minute: minute),
       builder: (context, child) => MediaQuery(
-        // Honour the platform's 24-hour display rather than the locale's,
-        // so the picker agrees with every time already on screen.
-        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        // Pinned rather than left to the locale, so both dresses ask the
+        // question the same way whatever device it runs on.
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
         child: child ?? const SizedBox.shrink(),
       ),
     );
@@ -79,7 +83,7 @@ Future<String?> pickWayfareTime(
             height: 216,
             child: CupertinoDatePicker(
               mode: CupertinoDatePickerMode.time,
-              use24hFormat: true,
+              use24hFormat: false,
               initialDateTime: draft,
               onDateTimeChanged: (d) => draft = d,
             ),

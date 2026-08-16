@@ -45,9 +45,10 @@ void main() {
       final picker =
           tester.widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker));
       expect(picker.mode, CupertinoDatePickerMode.time);
-      // Every time this app shows is 24-hour; an AM/PM picker would ask the
-      // user to translate their own boarding pass on the way in.
-      expect(picker.use24hFormat, isTrue);
+      // 12-hour with AM/PM, as asked for.
+      expect(picker.use24hFormat, isFalse);
+      // The wheel still opens on the right moment: 16:55 is 4:55 PM, and the
+      // value handed back stays 24-hour whatever the wheel shows.
       expect(picker.initialDateTime.hour, 16);
       expect(picker.initialDateTime.minute, 55);
 
@@ -55,7 +56,7 @@ void main() {
       expect(find.text('Select time'), findsNothing);
     });
 
-    testWidgets('Android gets the Material dial, in 24 hours', (tester) async {
+    testWidgets('Android gets the Material dial, also 12-hour', (tester) async {
       await pumpPicker(
         tester,
         WayfarePlatform.android,
@@ -64,9 +65,10 @@ void main() {
 
       expect(find.byType(CupertinoDatePicker), findsNothing);
       expect(find.text('Select time'), findsOneWidget);
-      // 24-hour there too, so the two dresses agree on what a time looks like.
-      expect(find.text('AM'), findsNothing);
-      expect(find.text('PM'), findsNothing);
+      // Both dresses ask the question the same way, rather than one following
+      // the device locale and the other not.
+      expect(find.text('AM'), findsOneWidget);
+      expect(find.text('PM'), findsOneWidget);
     });
   });
 
