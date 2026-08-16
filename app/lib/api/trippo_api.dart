@@ -437,6 +437,12 @@ class TrippoApi {
     return Plan.fromJson(json['plan'] as Map<String, dynamic>);
   }
 
+  /// Add a day to the end, lengthening the trip with it.
+  Future<Plan> addDay(String tripId) async {
+    final json = await _client.post('/trips/$tripId/plan/days');
+    return Plan.fromJson(json['plan'] as Map<String, dynamic>);
+  }
+
   /// Remove a day, shortening the trip with it.
   Future<Plan> deleteDay(String tripId, int day) async {
     final json = await _client.deleteReturning('/trips/$tripId/plan/days/$day');

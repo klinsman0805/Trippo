@@ -107,6 +107,14 @@ class _WayfareShellState extends State<WayfareShell> {
           onAction: _controller.tab == WayfareTab.group
               ? _controller.openSheet
               : _openTripOptions,
+          // Adding is its own affordance rather than a row at the end of the
+          // day, which is the point at which it is furthest from the thumb.
+          secondaryActionIcon:
+              _controller.tab == WayfareTab.itinerary && _controller.hasPlan
+                  ? Icons.add
+                  : null,
+          secondaryActionLabel: 'Add',
+          onSecondaryAction: _openAddMenu,
           // Only when there is a list behind us. Booting straight into a trip
           // with TRIPPO_TRIP_ID has nothing to go back to.
           onBack: Navigator.of(context).canPop()
@@ -215,7 +223,6 @@ class _WayfareShellState extends State<WayfareShell> {
           onEditActivity: _openEditActivity,
           onRemoveActivity: _openRemoveActivity,
           onMoveActivity: _openMoveActivity,
-          onChangeDayCount: _openDayCount,
         ),
       WayfareTab.budget => BudgetTab(controller: _controller),
       WayfareTab.group => GroupTab(controller: _controller),
@@ -404,20 +411,81 @@ class _WayfareShellState extends State<WayfareShell> {
     );
   }
 
-  Future<void> _openDayCount() async {
-    await _sheet2(
-      DayCountSheet(
-        envelope: _controller.dateEnvelope,
-        dayCount: _controller.plan?.itinerary.length ?? 0,
-        day: _controller.selectedDay,
-        activityCount: _controller.currentDay?.blocks.length ?? 0,
-        onKeep: () => Navigator.of(context).pop(),
-        onDeleteDay: () {
-          Navigator.of(context).pop();
-          _controller.deleteDay(_controller.selectedDay);
-        },
+  /// The header `+`: the two things there are to add.
+  Future<void> _openAddMenu() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WayfareColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(WayfareTheme.of(context).sheetRadius),
+        ),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 44,
+              height: 4,
+              decoration: BoxDecoration(
+                color: WayfareColors.border,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(height: 14),
+            ListTile(
+              leading:
+                  const Icon(Icons.add_task_outlined, color: WayfareColors.ink),
+              title: const Text('Add an activity'),
+              subtitle: Text('Onto day ${_controller.selectedDay}'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _openAddActivity(TimeOfDay.anytime);
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.today_outlined, color: WayfareColors.ink),
+              title: const Text('Add a day'),
+              subtitle: const Text('Extends the trip by one day'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _controller.addDay();
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
+  }
+
+  /// Removing the day currently on screen.
+  ///
+  /// Irreversible and it takes whatever is on the day, so it names the loss
+  /// rather than the action.
+  Future<void> _confirmDeleteDay(int day) async {
+    final count = _controller.currentDay?.blocks.length ?? 0;
+    final remaining = (_controller.plan?.itinerary.length ?? 1) - 1;
+
+    final confirmed = await confirmDestructive(
+      context,
+      title: 'Delete day $day?',
+      body: count == 0
+          ? 'The trip becomes $remaining days and your return moves a day '
+              'earlier. Nothing is planned on this day. The airline knows '
+              'nothing about this — your booking does not change.'
+          : 'The trip becomes $remaining days and your return moves a day '
+              'earlier, and the $count '
+              '${count == 1 ? 'activity' : 'activities'} on this day go with '
+              'it. The airline knows nothing about this — your booking does '
+              'not change.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep it',
+    );
+    if (confirmed) await _controller.deleteDay(day);
   }
 
   /// `↻` once hand-written work exists.
@@ -521,6 +589,22 @@ class _WayfareShellState extends State<WayfareShell> {
                   Navigator.of(sheetContext).pop();
                   _controller.goTo(WayfareTab.itinerary);
                               },
+              ),
+            // Acts on the day currently on screen, which is why it names it.
+            if (_controller.hasPlan &&
+                (_controller.plan?.itinerary.length ?? 0) > 1)
+              ListTile(
+                leading: const Icon(Icons.delete_outline,
+                    color: WayfareColors.destructiveInk),
+                title: Text(
+                  'Delete day ${_controller.selectedDay}',
+                  style: const TextStyle(color: WayfareColors.destructiveInk),
+                ),
+                subtitle: const Text('Shortens the trip by one day'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _confirmDeleteDay(_controller.selectedDay);
+                },
               ),
             // This is where regenerating lives now that the header icon no
             // longer implies it. Labelled, so it cannot be hit by accident.

@@ -5,6 +5,7 @@ import { getTrip } from '../trips/repo.js';
 import { listAcknowledged, setAcknowledged } from './conflicts.js';
 import {
   addBlock,
+  addDay,
   createBlankPlan,
   deleteDay,
   reconcileDays,
@@ -180,6 +181,16 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
     reply.code(201);
     return { plan: record.plan };
   });
+
+  /** Add a day to the end, lengthening the trip with it. */
+  app.post<{ Params: { id: string } }>(
+    '/trips/:id/plan/days',
+    async (req, reply) => {
+      getTrip(req.params.id);
+      reply.code(201);
+      return { plan: addDay(req.params.id) };
+    },
+  );
 
   /**
    * Remove a day and shorten the trip with it.

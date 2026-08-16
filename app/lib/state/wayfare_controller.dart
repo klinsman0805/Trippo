@@ -338,6 +338,21 @@ class WayfareController extends ChangeNotifier {
     await generate();
   }
 
+  /// Add a day to the end. The trip gets a day longer to match.
+  Future<void> addDay() async {
+    await _editPlan(() => _api.addDay(tripId));
+    try {
+      trip = await _api.getTrip(tripId);
+    } on ApiException catch (e) {
+      error = e.message;
+    }
+    // Land on the new day, so it is obvious something happened.
+    if (plan != null && plan!.itinerary.isNotEmpty) {
+      selectedDay = plan!.itinerary.last.day.toInt();
+    }
+    notifyListeners();
+  }
+
   /// Remove a day. The trip gets a day shorter, and the days after renumber.
   Future<void> deleteDay(int day) async {
     await _editPlan(() => _api.deleteDay(tripId, day));

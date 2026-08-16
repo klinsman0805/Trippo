@@ -20,6 +20,9 @@ class WayfareHeader extends StatelessWidget {
     required this.actionLabel,
     required this.onAction,
     this.onBack,
+    this.secondaryActionIcon,
+    this.secondaryActionLabel,
+    this.onSecondaryAction,
   });
 
   final String overline;
@@ -36,6 +39,13 @@ class WayfareHeader extends StatelessWidget {
   /// Back to the trip list. Null when this shell is the root — showing a back
   /// button with nowhere to go is worse than showing none.
   final VoidCallback? onBack;
+
+  /// An optional second action, sitting left of the first. Adding lives here
+  /// rather than at the end of the day's scroll, where it moved further away
+  /// the more there was to add to.
+  final IconData? secondaryActionIcon;
+  final String? secondaryActionLabel;
+  final VoidCallback? onSecondaryAction;
 
   @override
   Widget build(BuildContext context) {
@@ -83,6 +93,14 @@ class WayfareHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
+              if (secondaryActionIcon != null) ...[
+                _CircleActionButton(
+                  icon: secondaryActionIcon!,
+                  label: secondaryActionLabel ?? '',
+                  onPressed: onSecondaryAction ?? () {},
+                ),
+                const SizedBox(width: 8),
+              ],
               _CircleActionButton(
                 icon: actionIcon,
                 label: actionLabel,
@@ -154,6 +172,17 @@ class WayfareHeader extends StatelessWidget {
                 ],
               ),
             ),
+            if (secondaryActionIcon != null)
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: IconButton(
+                  onPressed: onSecondaryAction,
+                  tooltip: secondaryActionLabel,
+                  icon: Icon(secondaryActionIcon,
+                      size: 22, color: const Color(0xFF4A4239)),
+                ),
+              ),
             SizedBox(
               width: 48,
               height: 48,

@@ -105,6 +105,41 @@ export function createBlankPlan(tripId: string): PlanRecord {
 }
 
 /**
+ * Add a day to the end, and lengthen the trip to match.
+ *
+ * The mirror of [deleteDay], and required for the same reason: adding a day to
+ * the itinerary alone would leave the trip's dates a day short, and the next
+ * reconcile would take it straight back off.
+ */
+export function addDay(tripId: string): Plan {
+  const record = loadPlan(tripId);
+  const plan = record.plan;
+  ensureBlockIds(plan);
+
+  const trip = getTrip(tripId);
+  let date: string | null = null;
+
+  if (trip.start_date && trip.end_date) {
+    const end = Date.parse(`${trip.end_date}T00:00:00Z`) + 86_400_000;
+    date = new Date(end).toISOString().slice(0, 10);
+    updateTrip(tripId, { end_date: date });
+    plan.trip.end_date = date;
+  }
+
+  plan.itinerary.push({
+    day: plan.itinerary.length + 1,
+    date,
+    location: trip.destinations[0] ?? '',
+    lodging_area_suggestion: null,
+    blocks: [],
+    notes: null,
+  });
+
+  plan.trip.duration_days = plan.itinerary.length;
+  return persist(record, plan);
+}
+
+/**
  * Remove one day, and shorten the trip to match.
  *
  * Both halves are required. Dropping the day alone would leave the trip's

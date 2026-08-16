@@ -128,6 +128,16 @@ WayfareController editableController({
   return controller;
 }
 
+/// The Trip tab for one day. Grips and reorderable lists are always live —
+/// there is no mode to enter.
+Widget dayFor(WayfareController controller) => TripTab(
+      controller: controller,
+      onAddActivity: (_) {},
+      onEditActivity: (_) {},
+      onRemoveActivity: (_) {},
+      onMoveActivity: (_) {},
+    );
+
 void main() {
   group('The activity card', () {
     testWidgets('a hand-written one is marked, a planned one is not',
@@ -510,21 +520,11 @@ void main() {
   });
 
   group('Reordering within a slot', () {
-    /// A day in edit mode, so the grips and reorderable lists are live.
-    Widget dayInEditMode(WayfareController controller) => TripTab(
-          controller: controller,
-          onAddActivity: (_) {},
-          onEditActivity: (_) {},
-          onRemoveActivity: (_) {},
-          onMoveActivity: (_) {},
-          onChangeDayCount: () {},
-        );
-
     testWidgets('the grip offers an explicit menu, not only a drag',
         (tester) async {
       final controller = editableController();
 
-      await pump(tester, dayInEditMode(controller));
+      await pump(tester, dayFor(controller));
 
       // Drag is unreachable by keyboard and awkward with a screen reader, so
       // the same grip has to work by tapping.
@@ -538,7 +538,7 @@ void main() {
     testWidgets('the first item cannot move up, the last cannot move down',
         (tester) async {
       final controller = editableController();
-      await pump(tester, dayInEditMode(controller));
+      await pump(tester, dayFor(controller));
 
       await tapDown(tester, find.byType(ReorderGrip).first);
       final up = tester.widget<PopupMenuItem<int>>(
@@ -554,7 +554,7 @@ void main() {
     testWidgets('each slot reorders separately, so a drag cannot cross slots',
         (tester) async {
       final controller = editableController();
-      await pump(tester, dayInEditMode(controller));
+      await pump(tester, dayFor(controller));
 
       // Two morning activities and one afternoon → two independent lists.
       expect(find.byType(ReorderableListView), findsNWidgets(2));
@@ -563,7 +563,7 @@ void main() {
     testWidgets('a lone activity in a slot has nothing to reorder against',
         (tester) async {
       final controller = editableController(morningCount: 1);
-      await pump(tester, dayInEditMode(controller));
+      await pump(tester, dayFor(controller));
 
       // Both slots hold one thing, so every grip is inert rather than
       // offering an action that would do nothing.
@@ -574,7 +574,7 @@ void main() {
     testWidgets('the grip is a long-press handle wired to its slot',
         (tester) async {
       final controller = editableController(morningCount: 3);
-      await pump(tester, dayInEditMode(controller));
+      await pump(tester, dayFor(controller));
 
       // Long-press rather than immediate drag. An immediate drag competes
       // with the page's own vertical scroll for the same gesture and loses
@@ -602,12 +602,24 @@ void main() {
     testWidgets('grips are always there — there is no mode to enter',
         (tester) async {
       final controller = editableController();
-      await pump(tester, dayInEditMode(controller));
+      await pump(tester, dayFor(controller));
 
       // Rearranging is not a mode you switch into; it is just how the list
       // behaves.
       expect(find.byType(ReorderGrip), findsNWidgets(3));
       expect(find.byType(ReorderableListView), findsNWidgets(2));
+    });
+  });
+
+  group('Adding and removing days', () {
+    testWidgets('the day buttons are gone from the day itself', (tester) async {
+      final controller = editableController();
+      await pump(tester, dayFor(controller));
+
+      // Both moved to the header. At the end of a full day they sat further
+      // from the thumb the more there was on it.
+      expect(find.text('Add an activity'), findsNothing);
+      expect(find.text('Add or remove a day'), findsNothing);
     });
   });
 

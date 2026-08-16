@@ -19,7 +19,6 @@ class TripTab extends StatelessWidget {
     required this.onEditActivity,
     required this.onRemoveActivity,
     required this.onMoveActivity,
-    required this.onChangeDayCount,
   });
 
   final WayfareController controller;
@@ -29,7 +28,6 @@ class TripTab extends StatelessWidget {
   final ValueChanged<PlanBlock> onEditActivity;
   final ValueChanged<PlanBlock> onRemoveActivity;
   final ValueChanged<PlanBlock> onMoveActivity;
-  final VoidCallback onChangeDayCount;
 
   @override
   Widget build(BuildContext context) {
@@ -96,18 +94,9 @@ class TripTab extends StatelessWidget {
                     const SizedBox(height: WayfareSpace.cardGap),
                   ],
                 const SizedBox(height: 2),
-                WayfarePrimaryButton(
-                  label: 'Add an activity',
-                  onPressed: () => onAddActivity(TimeOfDay.anytime),
-                ),
-                const SizedBox(height: 10),
-                WayfareSecondaryButton(
-                  label: 'Add or remove a day',
-                  onPressed: onChangeDayCount,
-                  fontSize: 13.5,
-                  foreground: WayfareColors.muted,
-                ),
-                const SizedBox(height: 10),
+                // Adding lives in the header's `+`. Down here it sat below
+                // everything already planned, so it drifted further out of
+                // reach the more there was on the day.
                 if (day.blocks.any((b) => b.optional)) ...[
                   // Only offered when there is something optional to hide;
                   // otherwise it is a control that does nothing.
