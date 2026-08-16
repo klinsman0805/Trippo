@@ -160,6 +160,16 @@ backed out of and reopened, the wrong departure picked and changed. A published
 schedule does not move hour to hour, so repeats are served from memory. In
 practice four lookups cost one request.
 
+**Our schedule source has gaps, and the UI says so rather than blaming the
+user.** AeroDataBox reports AK893 operating on 26, 27, 28 and 30 September but
+not the 29th — a date Cirium carries, on a daily route. A traveller holding
+that boarding pass is right and we are wrong. So an empty lookup is never
+phrased as a mistake: it offers the dates we *do* hold for that number (one
+extra request, only on the failure path) and an `Enter the times myself`
+escape hatch that produces an identically shaped offer. Nothing downstream —
+envelope, short days, itinerary — can tell a hand-entered flight from a
+looked-up one.
+
 Two answers that are **not** errors and must not read as one: `204 No Content`
 means the flight does not operate that day, and `404` means no such number.
 Both come back as an empty list. A `429` waits out the stated interval —

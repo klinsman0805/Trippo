@@ -120,4 +120,17 @@ export interface ScheduleProvider {
    * distinguishable from an outage.
    */
   lookupFlights(query: FlightLookup): Promise<FlightItinerary[]>;
+
+  /**
+   * Which dates the provider believes this flight number operates.
+   *
+   * Only asked when a lookup came back empty, to turn a dead end into a useful
+   * answer. Providers that cannot answer return null, and the caller says
+   * nothing rather than guessing.
+   */
+  operatingDates?(
+    flightNumber: string,
+    fromDate: string,
+    toDate: string,
+  ): Promise<string[] | null>;
 }

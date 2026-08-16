@@ -227,7 +227,7 @@ class TrippoApi {
   /// An empty list means no such flight that day: a mistyped digit, usually.
   /// That is a normal answer the form shows against the field, not an error,
   /// so it is not an exception.
-  Future<List<FlightOffer>> lookupFlights({
+  Future<({List<FlightOffer> offers, List<String> nearbyDates})> lookupFlights({
     required String flightNumber,
     required String scheduledDate,
     String direction = 'outbound',
@@ -237,9 +237,42 @@ class TrippoApi {
       'scheduled_date': scheduledDate,
       'direction': direction,
     });
-    return (json['offers'] as List? ?? const [])
-        .map((o) => FlightOffer.fromJson(o as Map<String, dynamic>))
-        .toList();
+    return (
+      offers: (json['offers'] as List? ?? const [])
+          .map((o) => FlightOffer.fromJson(o as Map<String, dynamic>))
+          .toList(),
+      // Dates the schedule does have for this number, when it has none for
+      // the one asked for.
+      nearbyDates: (json['nearby_dates'] as List? ?? const [])
+          .map((d) => d.toString())
+          .toList(),
+    );
+  }
+
+  /// A flight the traveller entered themselves.
+  ///
+  /// Needed because schedule feeds have gaps: a real booking can be missing
+  /// from ours while other sources carry it. Their boarding pass outranks our
+  /// data, so this produces an identically shaped offer.
+  Future<FlightOffer> manualFlight({
+    required String flightNumber,
+    required String origin,
+    required String destination,
+    required String departsAt,
+    required String arrivesAt,
+    String direction = 'outbound',
+  }) async {
+    final json = await _client.post('/flights/manual', body: {
+      'flight_number': flightNumber,
+      'origin': origin,
+      'destination': destination,
+      'departs_at': departsAt,
+      'arrives_at': arrivesAt,
+      'direction': direction,
+    });
+    return FlightOffer.fromJson(
+      (json['offers'] as List).first as Map<String, dynamic>,
+    );
   }
 
   /// What an offer would do to the trip, without committing to it. Feeds the

@@ -11,6 +11,7 @@ import '../../../models/flight.dart';
 import '../../../models/trip.dart';
 import '../formatting.dart';
 import '../pushed_screen.dart';
+import 'manual_flight_sheet.dart';
 
 /// "I've already booked" — the shortest path to a dated trip.
 ///
@@ -71,6 +72,14 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
   bool _returnSettled = false;
 
   String? _error;
+
+  /// Dates the schedule does have for the number, when it has none for the
+  /// date asked. Offered as chips rather than left as a dead end.
+  List<String> _nearbyDates = const [];
+
+  /// Which leg the "enter it yourself" form is open for, if any.
+  _Leg? _manualFor;
+
   bool _looking = false;
   bool _saving = false;
 
@@ -127,6 +136,12 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
     if (_error != null) {
       steps
         ..add(_errorPanel(context))
+        ..add(const SizedBox(height: WayfareSpace.cardGap));
+    }
+
+    if (_manualFor != null && !_looking) {
+      steps
+        ..add(_notInOurSchedule(context, _manualFor!))
         ..add(const SizedBox(height: WayfareSpace.cardGap));
     }
 
@@ -479,6 +494,8 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
       }
       _options = const [];
       _awaitingChoice = null;
+      _manualFor = null;
+      _nearbyDates = const [];
     });
     _lookUp(leg);
   }
@@ -650,6 +667,119 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
         ),
       );
 
+  /// What to show when the lookup found nothing.
+  ///
+  /// Deliberately not an error. Our schedule source is one feed among several
+  /// and demonstrably incomplete — it is missing dates for AK893 that others
+  /// carry. Someone holding a boarding pass is right and we are wrong, so the
+  /// panel offers the dates we do have and, either way, a way through.
+  Widget _notInOurSchedule(BuildContext context, _Leg leg) {
+    final theme = WayfareTheme.of(context);
+    final number = (leg == _Leg.outbound ? _outboundNumber : _returnNumber)
+        .text
+        .trim()
+        .toUpperCase();
+    final date = leg == _Leg.outbound ? _outboundDate : _returnDate;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: WayfareColors.amberSurface,
+        borderRadius: theme.cardLg,
+        border: Border.all(color: WayfareColors.amberBorder, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const WayfareEyebrow(
+            'Not in our schedule',
+            color: WayfareColors.amberInkDeep,
+            size: 10.5,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            date == null
+                ? "We don't have $number on that date."
+                : "We don't have $number on ${formatLongDate(date)}.",
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _nearbyDates.isEmpty
+                ? 'Our flight data does not cover every airline and date. If '
+                    'your booking says otherwise, your booking is right.'
+                : 'Our flight data has gaps, so this may still be your flight. '
+                    'We do have it on these days:',
+            style: WayfareType.body(13.5, color: WayfareColors.amberInk),
+          ),
+          if (_nearbyDates.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final iso in _nearbyDates)
+                  WayfareSelectChip(
+                    label: formatLongDate(DateTime.parse(iso)),
+                    selected: false,
+                    fontSize: 12.5,
+                    minHeight: WayfareTouch.ios,
+                    onTap: () => _pickDate(leg, DateTime.parse(iso)),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 14),
+          WayfareSecondaryButton(
+            label: 'Enter the times myself',
+            onPressed: () => _openManualEntry(leg),
+            minHeight: WayfareTouch.ios,
+            fontSize: 13.5,
+            foreground: WayfareColors.amberButtonInk,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openManualEntry(_Leg leg) async {
+    final controller = leg == _Leg.outbound ? _outboundNumber : _returnNumber;
+    final date = leg == _Leg.outbound ? _outboundDate : _returnDate;
+    if (date == null) return;
+
+    final offer = await showModalBottomSheet<FlightOffer>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => WayfareTheme(
+        platform: WayfareTheme.of(context).platform,
+        child: ManualFlightSheet(
+          api: widget.api,
+          flightNumber: controller.text.trim().toUpperCase(),
+          date: date,
+          direction: leg == _Leg.outbound ? 'outbound' : 'return',
+          onCancel: () => Navigator.of(sheetContext).pop(),
+        ),
+      ),
+    );
+
+    if (offer == null || !mounted) return;
+    setState(() {
+      if (leg == _Leg.outbound) {
+        _outbound = offer;
+      } else {
+        _back = offer;
+        _returnSettled = true;
+      }
+      _manualFor = null;
+      _nearbyDates = const [];
+    });
+  }
+
   Widget _errorPanel(BuildContext context) {
     final theme = WayfareTheme.of(context);
 
@@ -685,21 +815,22 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
     });
 
     try {
-      final offers = await widget.api.lookupFlights(
+      final result = await widget.api.lookupFlights(
         flightNumber: controller.text.trim(),
         scheduledDate: _iso(date),
         direction: leg == _Leg.outbound ? 'outbound' : 'return',
       );
 
       setState(() {
-        _options = offers;
-        _awaitingChoice = offers.isEmpty ? null : leg;
-        _error = offers.isEmpty
-            ? "We can't find ${controller.text.trim().toUpperCase()} on "
-                '${formatLongDate(date)}. Check the number and the date — '
-                'flights are listed under the airline that operates them, '
-                'which is not always the one you booked through.'
-            : null;
+        _options = result.offers;
+        _awaitingChoice = result.offers.isEmpty ? null : leg;
+        // Not an error, and never phrased as the traveller's mistake. Schedule
+        // feeds have gaps — a real booking can be missing from ours while
+        // other sources carry it — so this says what we have and gets out of
+        // the way.
+        _nearbyDates = result.offers.isEmpty ? result.nearbyDates : const [];
+        _manualFor = result.offers.isEmpty ? leg : null;
+        _error = null;
       });
     } on ApiException catch (e) {
       setState(() => _error = e.message);

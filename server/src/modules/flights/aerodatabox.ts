@@ -58,6 +58,41 @@ export class AeroDataBoxProvider implements ScheduleProvider {
     );
   }
 
+  /**
+   * The dates this number flies, within a window.
+   *
+   * Used only after an empty lookup. Schedule feeds have gaps — this one is
+   * missing dates that Cirium carries for the same flight — so the answer is
+   * offered as what *we* have, never as what exists.
+   */
+  async operatingDates(
+    flightNumber: string,
+    fromDate: string,
+    toDate: string,
+  ): Promise<string[] | null> {
+    if (!this.configured) return null;
+
+    const url =
+      `https://${env.AERODATABOX_HOST}/flights/number/` +
+      `${encodeURIComponent(flightNumber)}/dates/${fromDate}/${toDate}`;
+
+    try {
+      const res = await fetchWithRetry(url, {
+        provider: 'aerodatabox',
+        headers: {
+          'X-RapidAPI-Key': env.AERODATABOX_API_KEY!,
+          'X-RapidAPI-Host': env.AERODATABOX_HOST,
+        },
+      });
+      const dates = await jsonOrThrow<string[] | null>(res, 'aerodatabox');
+      return Array.isArray(dates) ? dates : [];
+    } catch {
+      // Best-effort help. Failing to find alternatives must never turn into a
+      // second error on top of the one the user already has.
+      return null;
+    }
+  }
+
   private async fetchSchedules(query: FlightLookup): Promise<FlightItinerary[]> {
     const url =
       `https://${env.AERODATABOX_HOST}/flights/number/` +

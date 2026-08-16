@@ -12,6 +12,27 @@ import {
 import { deriveTripEnvelope } from './envelope.js';
 import { FlightLookupSchema, FlightSearchSchema, type FlightOffer } from './types.js';
 
+/**
+ * Dates around the one asked for that the provider says this flight operates.
+ *
+ * A week either side: far enough to catch a day misremembered, near enough
+ * that the list stays readable. Costs one extra request, and only on the
+ * failure path.
+ */
+async function nearbyDates(
+  provider: { operatingDates?: (n: string, from: string, to: string) => Promise<string[] | null> },
+  flightNumber: string,
+  around: string,
+): Promise<string[]> {
+  if (!provider.operatingDates) return [];
+  const shift = (days: number) =>
+    new Date(Date.parse(`${around}T00:00:00Z`) + days * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+  const dates = await provider.operatingDates(flightNumber, shift(-7), shift(7));
+  return dates ?? [];
+}
+
 export async function flightRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { q?: string } }>('/flights/airports', async (req) => {
     const q = req.query.q?.trim();
@@ -61,7 +82,79 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
       last_ticketing_date: null,
     }));
 
-    return { found: offers.length > 0, offers };
+    if (offers.length > 0) return { found: true, offers, nearby_dates: [] };
+
+    // Empty is not the end of the road. Schedule feeds have gaps — this one is
+    // missing dates for AK893 that Cirium carries — so we offer the dates we
+    // do hold and let the traveller overrule us either way. Telling someone
+    // holding a valid ticket to "check the number" is the worst answer here.
+    const nearby = await nearbyDates(provider, parsed.data.flight_number, parsed.data.scheduled_date);
+    return { found: false, offers: [], nearby_dates: nearby };
+  });
+
+  const ManualFlightBody = z.object({
+    flight_number: z.string().trim().min(2).max(8),
+    origin: z.string().length(3).toUpperCase(),
+    destination: z.string().length(3).toUpperCase(),
+    /** Local wall-clock at each airport, as everywhere else in this codebase. */
+    departs_at: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/),
+    arrives_at: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/),
+    direction: z.enum(['outbound', 'return']).default('outbound'),
+  });
+
+  /**
+   * A flight the traveller entered themselves.
+   *
+   * The escape hatch for when our schedule source does not have their flight.
+   * They are reading a boarding pass; it outranks our data. The result is
+   * shaped exactly like a looked-up one so nothing downstream — envelope,
+   * short days, the itinerary — can tell the difference.
+   */
+  app.post('/flights/manual', async (req) => {
+    const parsed = ManualFlightBody.safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest('validation_error', 'Invalid flight details', parsed.error.flatten());
+    }
+    const d = parsed.data;
+    const pad = (t: string) => (t.length === 16 ? `${t}:00` : t);
+    const departs = pad(d.departs_at);
+    const arrives = pad(d.arrives_at);
+
+    const offer: FlightOffer = {
+      id: `manual-${d.flight_number}-${departs}`,
+      provider: 'traveller',
+      is_estimate: false,
+      booked: true,
+      price_total: 0,
+      price_per_traveler: 0,
+      currency: 'USD',
+      cabin: 'ECONOMY',
+      seats_available: null,
+      itineraries: [
+        {
+          direction: d.direction,
+          // Local times in two zones cannot be subtracted, and we were not
+          // told the zones — so no duration is claimed rather than a wrong one.
+          duration_minutes: 0,
+          stops: 0,
+          segments: [
+            {
+              origin: d.origin,
+              destination: d.destination,
+              departs_at: departs,
+              arrives_at: arrives,
+              carrier_code: d.flight_number.slice(0, 2).toUpperCase(),
+              flight_number: d.flight_number.replace(/\s+/g, '').toUpperCase(),
+              duration_minutes: 0,
+              aircraft: null,
+            },
+          ],
+        },
+      ],
+      last_ticketing_date: null,
+    };
+
+    return { found: true, offers: [offer], nearby_dates: [] };
   });
 
   app.post('/flights/search', async (req) => {

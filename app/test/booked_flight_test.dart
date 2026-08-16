@@ -63,7 +63,10 @@ void main() {
 
   /// [departuresPerDay] drives the "which departure" step: 0 is a number the
   /// schedule has never heard of, 2 is a number that flies twice that day.
-  TrippoApi api({int departuresPerDay = 1}) {
+  TrippoApi api({
+    int departuresPerDay = 1,
+    List<String> nearbyDates = const ['2026-09-27', '2026-09-30'],
+  }) {
     lookups = [];
     selections = [];
 
@@ -101,7 +104,13 @@ void main() {
         ];
 
         return http.Response(
-          jsonEncode({'found': offers.isNotEmpty, 'offers': offers}),
+          jsonEncode({
+            'found': offers.isNotEmpty,
+            'offers': offers,
+            // What the schedule does have for this number, when it has nothing
+            // for the date asked.
+            'nearby_dates': offers.isEmpty ? nearbyDates : const <String>[],
+          }),
           200,
         );
       }
@@ -309,18 +318,39 @@ void main() {
     expect(selections.map((s) => s['direction']), ['outbound', 'return']);
   });
 
-  testWidgets('an unknown number fails against the field, not as an outage',
+  testWidgets('a flight our schedule lacks is not the traveller\'s fault',
       (tester) async {
     await pump(tester, api(departuresPerDay: 0));
-    await findFlight(tester, 'ZZ999');
+    await findFlight(tester, 'AK893');
     await pickDate(tester);
 
-    expect(find.textContaining("We can't find ZZ999"), findsOneWidget);
+    // Our feed is demonstrably incomplete — it misses dates other sources
+    // carry — so this must never read as "you got it wrong".
+    expect(find.text('NOT IN OUR SCHEDULE'), findsOneWidget);
+    expect(find.textContaining('Our flight data has gaps'), findsOneWidget);
+    expect(find.textContaining('Check the number'), findsNothing);
+    expect(find.textContaining('went wrong'), findsNothing);
+
+    // The dates we do have, offered as one tap each.
+    expect(find.text('27 September'), findsOneWidget);
+    expect(find.text('30 September'), findsOneWidget);
+
+    // And a way through regardless of what our data says.
+    expect(find.text('Enter the times myself'), findsOneWidget);
+  });
+
+  testWidgets('with no alternatives, it still defers to the booking',
+      (tester) async {
+    await pump(tester, api(departuresPerDay: 0, nearbyDates: const []));
+    await findFlight(tester, 'AK893');
+    await pickDate(tester);
+
     expect(
-      find.textContaining('listed under the airline that operates them'),
+      find.textContaining('If your booking says otherwise, your booking is '
+          'right'),
       findsOneWidget,
     );
-    expect(find.textContaining('went wrong'), findsNothing);
+    expect(find.text('Enter the times myself'), findsOneWidget);
   });
 
   testWidgets('a chosen leg can be changed without starting over',
