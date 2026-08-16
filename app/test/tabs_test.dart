@@ -269,13 +269,22 @@ void main() {
       expect(find.text('Add the first traveller'), findsOneWidget);
     });
 
-    testWidgets('one traveller disables Generate and says why', (tester) async {
+    testWidgets('one traveller still plans, and says what a second adds',
+        (tester) async {
       final controller = buildController(members: const [_maya]);
       await pumpTab(tester, GroupTab(controller: controller));
 
-      expect(find.text('Two travellers minimum'), findsOneWidget);
-      // The button renders at reduced opacity and takes no tap when disabled.
-      expect(controller.canGenerate, isFalse);
+      // Travellers tailor the plan; they do not gate it. What they buy you is
+      // stated as an invitation rather than as a requirement.
+      expect(controller.canGenerate, isTrue);
+      expect(
+        find.text(
+          'Add a second traveller and the planner starts balancing between you.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Two travellers minimum'), findsNothing);
+
       final opacity = tester.widget<Opacity>(
         find
             .ancestor(
@@ -284,7 +293,28 @@ void main() {
             )
             .first,
       );
-      expect(opacity.opacity, 0.5);
+      expect(opacity.opacity, 1);
+    });
+
+    testWidgets('a trip with no destination is what actually blocks Generate',
+        (tester) async {
+      final controller = buildController(members: const [_maya, _diego]);
+      controller.trip = Trip(
+        id: 'trip_test',
+        title: 'Untitled',
+        destinations: const [],
+        currency: 'EUR',
+        members: const [_maya, _diego],
+        updatedAt: DateTime(2026, 9, 1),
+      );
+
+      await pumpTab(tester, GroupTab(controller: controller));
+
+      expect(controller.canGenerate, isFalse);
+      expect(
+        find.text('Add a destination first — the planner needs somewhere to go.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('travellers render with pace, interests and needs',

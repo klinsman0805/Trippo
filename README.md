@@ -253,6 +253,34 @@ Nothing is written until the consequence sheet is confirmed: selection derives
 the envelope through a preview endpoint, shows what each affected day loses, and
 only then commits.
 
+## Three ways into a dated trip
+
+The Trip tab leads with three options while a trip has no dates, ordered by how
+much work each asks rather than by what the app would prefer you did:
+
+1. **"I have my flight booked"** — a flight number and a date. The schedule
+   fills in the rest, including the short first and last days. Someone holding
+   a booking has the answer already and should not be sent shopping.
+2. **"Haven't booked yet?"** — the search flow, with the consequence sheet.
+3. **"Not flying?"** — a date range, no flight. No envelope is derived, so no
+   day is marked short: a 09:00 train does not cost you a morning the way a
+   13:15 landing does, and guessing would put a warning on a day that is fine.
+
+A booked flight is stored with `booked: true` and no price. There is a fare, but
+they already paid it and we were not there — inventing one would put a number in
+the budget that nobody is going to pay.
+
+**On Skyscanner:** its Flights Live Prices API is partner-gated — a dedicated
+account manager and a revenue/commissions portal, not a self-serve key — and it
+searches by route and date, so it cannot answer "what does MH123 do on the 12th"
+at all. Flight-number lookup therefore runs on Amadeus's On-Demand Flight
+Status, and search stays on Amadeus. Both sit behind `FlightProvider`, so
+Skyscanner can be added as a third adapter if a partnership ever lands.
+
+**Travellers are optional.** They are what make a plan *tailored* — pace, access
+needs, and the conflicts between them — not what makes it possible. The planner
+needs a destination; everything else is an improvement.
+
 ## The three load-bearing states
 
 **`failed` — the planner stopped and produced nothing.** A page, not an overlay,

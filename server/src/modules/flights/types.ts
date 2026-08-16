@@ -19,6 +19,27 @@ export const FlightSearchSchema = z
 
 export type FlightSearch = z.infer<typeof FlightSearchSchema>;
 
+/**
+ * Looking up a flight the group has already booked.
+ *
+ * A different question from search: they are not shopping, they are telling us
+ * when they land. So this takes the flight number off their booking and
+ * returns the schedule — never a price, because the price is already paid and
+ * inventing one would be worse than showing nothing.
+ */
+export const FlightLookupSchema = z.object({
+  /** `MH123`, `mh 123`, `MH 0123` — normalised before it reaches a provider. */
+  flight_number: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9]{2}\s?\d{1,4}$/, 'Expected a flight number like MH123')
+    .transform((v) => v.replace(/\s+/g, '').toUpperCase()),
+  scheduled_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  direction: z.enum(['outbound', 'return']).default('outbound'),
+});
+
+export type FlightLookup = z.infer<typeof FlightLookupSchema>;
+
 export interface FlightSegment {
   origin: string;
   destination: string;
@@ -43,6 +64,12 @@ export interface FlightOffer {
   provider: string;
   /** True when prices are synthetic and must not be shown as real fares. */
   is_estimate: boolean;
+  /**
+   * True when this came from a booking the group already holds, rather than
+   * from shopping. The price fields are then meaningless — they paid what they
+   * paid, and we were not there — so the client must show no figure at all.
+   */
+  booked: boolean;
   price_total: number;
   price_per_traveler: number;
   currency: string;
@@ -68,4 +95,10 @@ export interface FlightProvider {
   readonly configured: boolean;
   search(query: FlightSearch): Promise<FlightOffer[]>;
   searchAirports(keyword: string): Promise<AirportMatch[]>;
+  /**
+   * Resolve one already-booked flight to its schedule. Null when the provider
+   * has no record of it — a wrong digit is the common case, and that has to be
+   * distinguishable from an outage.
+   */
+  lookupFlight(query: FlightLookup): Promise<FlightItinerary | null>;
 }

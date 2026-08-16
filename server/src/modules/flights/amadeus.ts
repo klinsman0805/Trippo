@@ -4,6 +4,7 @@ import { UpstreamError } from '../../lib/errors.js';
 import type {
   AirportMatch,
   FlightItinerary,
+  FlightLookup,
   FlightOffer,
   FlightProvider,
   FlightSearch,
@@ -89,6 +90,67 @@ export class AmadeusProvider implements FlightProvider {
     return (body.data ?? []).map((offer) => this.toOffer(offer, query));
   }
 
+  /**
+   * On-Demand Flight Status, which answers "what does this flight number do on
+   * this date" — a schedule question, not a shopping one.
+   *
+   * A 404 or an empty payload means no such flight that day. That is returned
+   * as null rather than thrown: a mistyped digit is the ordinary case here and
+   * must not read to the user as the service being down.
+   */
+  async lookupFlight(query: FlightLookup): Promise<FlightItinerary | null> {
+    const carrierCode = query.flight_number.slice(0, 2);
+    const number = query.flight_number.slice(2).replace(/^0+/, '');
+
+    let body: { data?: AmadeusScheduledFlight[] };
+    try {
+      body = await this.get<{ data?: AmadeusScheduledFlight[] }>('/v2/schedule/flights', {
+        carrierCode,
+        flightNumber: number,
+        scheduledDepartureDate: query.scheduled_date,
+      });
+    } catch (err) {
+      if (err instanceof UpstreamError && err.upstreamStatus === 404) return null;
+      throw err;
+    }
+
+    const points = body.data?.[0]?.flightPoints ?? [];
+    if (points.length < 2) return null;
+
+    const first = points[0]!;
+    const last = points[points.length - 1]!;
+    const departsAt = first.departure?.timings?.[0]?.value;
+    const arrivesAt = last.arrival?.timings?.[0]?.value;
+    if (!departsAt || !arrivesAt) return null;
+
+    // Amadeus returns local times with an offset; the rest of this codebase
+    // treats flight times as local-to-their-airport and reads them off the
+    // string, so the offset is trimmed rather than converted.
+    const departs = departsAt.slice(0, 19);
+    const arrives = arrivesAt.slice(0, 19);
+
+    return {
+      direction: query.direction,
+      duration_minutes: minutesBetween(departs, arrives),
+      // The schedule feed describes one marketed flight number; a codeshare
+      // with a stop still arrives when it arrives, which is all the envelope
+      // needs.
+      stops: Math.max(points.length - 2, 0),
+      segments: [
+        {
+          origin: first.iataCode,
+          destination: last.iataCode,
+          departs_at: departs,
+          arrives_at: arrives,
+          carrier_code: carrierCode,
+          flight_number: query.flight_number,
+          duration_minutes: minutesBetween(departs, arrives),
+          aircraft: null,
+        },
+      ],
+    };
+  }
+
   async searchAirports(keyword: string): Promise<AirportMatch[]> {
     const body = await this.get<{ data?: AmadeusLocation[] }>('/v1/reference-data/locations', {
       keyword,
@@ -133,6 +195,7 @@ export class AmadeusProvider implements FlightProvider {
       id: raw.id,
       provider: this.name,
       is_estimate: this.isTestEnvironment,
+      booked: false,
       price_total: total,
       price_per_traveler: query.adults > 0 ? round2(total / query.adults) : total,
       currency: raw.price?.currency ?? query.currency,
@@ -176,9 +239,24 @@ interface AmadeusOffer {
   travelerPricings?: { fareDetailsBySegment?: { cabin?: string }[] }[];
 }
 
+/** Subset of the On-Demand Flight Status payload this adapter reads. */
+interface AmadeusScheduledFlight {
+  flightPoints?: {
+    iataCode: string;
+    departure?: { timings?: { qualifier: string; value: string }[] };
+    arrival?: { timings?: { qualifier: string; value: string }[] };
+  }[];
+}
+
 interface AmadeusLocation {
   iataCode: string;
   name: string;
   address?: { cityName?: string; countryName?: string };
   geoCode?: { latitude?: number; longitude?: number };
+}
+
+/** Both are local wall-clock strings, so this is plain arithmetic on the date. */
+function minutesBetween(from: string, to: string): number {
+  const ms = Date.parse(`${to}Z`) - Date.parse(`${from}Z`);
+  return Number.isFinite(ms) ? Math.max(Math.round(ms / 60_000), 0) : 0;
 }

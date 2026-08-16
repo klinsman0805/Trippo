@@ -77,7 +77,18 @@ class WayfareController extends ChangeNotifier {
   bool get hasPlan => plan != null && plan!.itinerary.isNotEmpty;
   bool get isReady => hasPlan;
   List<Member> get members => trip?.members ?? const [];
-  bool get canGenerate => members.length >= 2;
+
+  /// Travellers are optional.
+  ///
+  /// They make the plan more tailored — pace, access needs and the conflicts
+  /// between them are what this planner is for — but a solo traveller, or
+  /// someone who hasn't got round to adding the group yet, still gets a real
+  /// itinerary. What the planner actually needs is somewhere to go.
+  bool get canGenerate => trip != null && trip!.destinations.isNotEmpty;
+
+  /// Whether the plan is missing the group context that makes it worth using.
+  /// Not a blocker — a prompt.
+  bool get wouldBenefitFromTravellers => members.length < 2;
 
   /// The planner asked questions instead of planning. The spec's rule is that
   /// the questions replace the itinerary rather than sitting beside it.
@@ -246,6 +257,30 @@ class WayfareController extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// Dates without a flight behind them — the "not flying" path.
+  ///
+  /// Deliberately does not derive a date envelope: there is no arrival time to
+  /// reason about, so no day is short. Inventing one would put a warning on a
+  /// day that is perfectly fine.
+  Future<void> setDatesByHand(DateTime start, DateTime end) async {
+    try {
+      trip = await _api.updateTrip(tripId, {
+        'start_date': _isoDate(start),
+        'end_date': _isoDate(end),
+        'date_flexible': false,
+      });
+      error = null;
+    } on ApiException catch (e) {
+      error = e.message;
+    }
+    notifyListeners();
+  }
+
+  static String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 
   // --- planning ---
 

@@ -9,7 +9,7 @@ import {
   saveSelection,
 } from './index.js';
 import { deriveTripEnvelope } from './envelope.js';
-import { FlightSearchSchema } from './types.js';
+import { FlightLookupSchema, FlightSearchSchema, type FlightOffer } from './types.js';
 
 export async function flightRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { q?: string } }>('/flights/airports', async (req) => {
@@ -18,6 +18,51 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
       throw badRequest('missing_query', 'Provide ?q= with at least 2 characters.');
     }
     return { airports: await flightProvider().searchAirports(q) };
+  });
+
+  /**
+   * Look up a flight the group has already booked.
+   *
+   * Returns an offer-shaped record so the rest of the pipeline — envelope,
+   * selection, short days — is identical to a searched flight. The difference
+   * is `booked: true` and zeroed prices, which the client renders as "already
+   * booked" rather than as a fare. Making up a number here would put a figure
+   * in the budget that nobody is going to pay.
+   */
+  app.post('/flights/by-number', async (req) => {
+    const parsed = FlightLookupSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest(
+        'validation_error',
+        'Expected { flight_number, scheduled_date }',
+        parsed.error.flatten(),
+      );
+    }
+
+    const provider = flightProvider();
+    const itinerary = await provider.lookupFlight(parsed.data);
+
+    // Not found is a normal answer, not an error: a mistyped digit is the
+    // common case and the client shows it inline against the field.
+    if (!itinerary) {
+      return { found: false, offer: null };
+    }
+
+    const offer: FlightOffer = {
+      id: `booked-${parsed.data.flight_number}-${parsed.data.scheduled_date}`,
+      provider: provider.name,
+      is_estimate: false,
+      booked: true,
+      price_total: 0,
+      price_per_traveler: 0,
+      currency: 'USD',
+      cabin: 'ECONOMY',
+      seats_available: null,
+      itineraries: [itinerary],
+      last_ticketing_date: null,
+    };
+
+    return { found: true, offer };
   });
 
   app.post('/flights/search', async (req) => {

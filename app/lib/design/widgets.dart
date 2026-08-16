@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'theme.dart';
 import 'tokens.dart';
@@ -501,6 +502,8 @@ class WayfareTextField extends StatelessWidget {
     this.pillShaped = false,
     this.autofocus = false,
     this.maxLines = 1,
+    this.textCapitalization = TextCapitalization.none,
+    this.inputFormatters,
   });
 
   final TextEditingController controller;
@@ -510,6 +513,11 @@ class WayfareTextField extends StatelessWidget {
   final bool pillShaped;
   final bool autofocus;
   final int maxLines;
+  final TextCapitalization textCapitalization;
+
+  /// Constrain input at the keyboard rather than rejecting it afterwards —
+  /// used for things with a known shape, like a flight number.
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -522,6 +530,8 @@ class WayfareTextField extends StatelessWidget {
       onChanged: onChanged,
       autofocus: autofocus,
       maxLines: maxLines,
+      textCapitalization: textCapitalization,
+      inputFormatters: inputFormatters,
       // 16px prevents iOS Safari-style zoom and matches the spec exactly.
       style: const TextStyle(fontSize: 16, color: WayfareColors.ink),
       cursorColor: WayfareColors.ink,

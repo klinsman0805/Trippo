@@ -4,8 +4,10 @@ import '../../api/trippo_api.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
 import '../../design/widgets.dart';
+import '../../models/trip.dart';
 import '../../state/wayfare_controller.dart';
 import 'budget_tab.dart';
+import 'flights/booked_flight_screen.dart';
 import 'flights/flights_screen.dart';
 import 'formatting.dart';
 import 'group_tab.dart';
@@ -101,6 +103,11 @@ class _WayfareShellState extends State<WayfareShell> {
           onAction: _controller.tab == WayfareTab.group
               ? _controller.openSheet
               : _openTripOptions,
+          // Only when there is a list behind us. Booting straight into a trip
+          // with TRIPPO_TRIP_ID has nothing to go back to.
+          onBack: Navigator.of(context).canPop()
+              ? () => Navigator.of(context).pop()
+              : null,
         ),
         Expanded(
           child: SingleChildScrollView(
@@ -154,7 +161,9 @@ class _WayfareShellState extends State<WayfareShell> {
         !_controller.hasPlan &&
         (_controller.trip?.startDate == null)) {
       return _NoDatesYet(
+        onEnterBookedFlight: _openBookedFlight,
         onOpenFlights: _openFlights,
+        onSetDatesByHand: _pickDatesByHand,
         onGoToGroup: () => _controller.goTo(WayfareTab.group),
         memberCount: _controller.members.length,
       );
@@ -166,10 +175,12 @@ class _WayfareShellState extends State<WayfareShell> {
         title: _controller.tab == WayfareTab.budget
             ? 'No numbers yet'
             : 'No itinerary yet',
-        note: _controller.members.length < 2
-            ? 'Add at least two travellers with their preferences, then hit Generate.'
-            : 'You have ${_controller.members.length} travellers ready. '
-                'Hit Generate and this fills in.',
+        note: _controller.members.isEmpty
+            ? 'Hit Generate whenever you like. Adding travellers first makes '
+                'the plan fit the group, but it is not required.'
+            : 'You have ${_controller.members.length} '
+                '${_controller.members.length == 1 ? 'traveller' : 'travellers'} '
+                'ready. Hit Generate and this fills in.',
         onGoToGroup: () => _controller.goTo(WayfareTab.group),
       );
     }
@@ -207,6 +218,56 @@ class _WayfareShellState extends State<WayfareShell> {
     );
   }
 
+  /// "I have my flight booked" — the shortest path to a dated trip.
+  Future<void> _openBookedFlight() async {
+    final trip = _controller.trip;
+    if (trip == null) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BookedFlightScreen(
+          api: widget.api,
+          trip: trip,
+          onConfirmed: (_) {
+            Navigator.of(context).pop();
+            _controller.goTo(WayfareTab.itinerary);
+            _controller.load();
+          },
+        ),
+      ),
+    );
+  }
+
+  /// "Not flying" — dates without a flight behind them.
+  ///
+  /// No envelope is derived, so no day is marked short. That is correct rather
+  /// than missing: a train at 09:00 does not cost you a morning the way a
+  /// 13:15 landing does, and guessing would be worse than saying nothing.
+  Future<void> _pickDatesByHand() async {
+    final trip = _controller.trip;
+    if (trip == null) return;
+
+    final now = DateTime.now();
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 2),
+      initialDateRange: _existingRange(trip),
+      helpText: 'When are you travelling?',
+      saveText: 'Set dates',
+    );
+    if (range == null) return;
+
+    await _controller.setDatesByHand(range.start, range.end);
+  }
+
+  DateTimeRange? _existingRange(Trip trip) {
+    final start = DateTime.tryParse(trip.startDate ?? '');
+    final end = DateTime.tryParse(trip.endDate ?? '');
+    if (start == null || end == null || end.isBefore(start)) return null;
+    return DateTimeRange(start: start, end: end);
+  }
+
   /// The header `⋯` sheet on non-Group tabs.
   void _openTripOptions() {
     showModalBottomSheet<void>(
@@ -232,14 +293,51 @@ class _WayfareShellState extends State<WayfareShell> {
             ),
             const SizedBox(height: 14),
             ListTile(
+              leading: const Icon(Icons.confirmation_number_outlined,
+                  color: WayfareColors.ink),
+              title: const Text('I have my flight booked'),
+              subtitle: const Text('Set the dates from a flight number'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _openBookedFlight();
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.flight_takeoff, color: WayfareColors.ink),
-              title: const Text('Flights and dates'),
+              title: const Text('Search flights'),
               subtitle: const Text('Picking flights sets the trip dates'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 _openFlights();
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.event_outlined, color: WayfareColors.ink),
+              title: const Text('Set dates myself'),
+              subtitle: const Text('For trips that do not involve a flight'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _pickDatesByHand();
+              },
+            ),
+            // This is where regenerating lives now that the header icon no
+            // longer implies it. Labelled, so it cannot be hit by accident.
+            if (_controller.canGenerate)
+              ListTile(
+                leading: const Icon(Icons.auto_awesome, color: WayfareColors.ink),
+                title: Text(
+                  _controller.isReady
+                      ? 'Regenerate the itinerary'
+                      : 'Generate the itinerary',
+                ),
+                subtitle: _controller.isReady
+                    ? const Text('Replaces the current plan')
+                    : null,
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _controller.generate();
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.chat_bubble_outline, color: WayfareColors.ink),
               title: const Text('Ask for a change'),
@@ -374,13 +472,15 @@ class _WayfareShellState extends State<WayfareShell> {
     };
   }
 
-  /// `+` on Group opens the sheet; `↻` on Trip and `⋯` elsewhere route to
-  /// Refine, per the handoff.
-  IconData _actionIcon() => switch (_controller.tab) {
-        WayfareTab.group => Icons.add,
-        WayfareTab.itinerary => Icons.refresh,
-        _ => Icons.more_horiz,
-      };
+  /// `+` on Group opens the add sheet; everywhere else the action opens the
+  /// options menu.
+  ///
+  /// The Trip tab used a refresh icon, which promised a reload and delivered a
+  /// menu. The icon has to describe what the button does, not what the tab is
+  /// about — regenerating lives inside the menu, where it is labelled.
+  IconData _actionIcon() => _controller.tab == WayfareTab.group
+      ? Icons.add
+      : Icons.more_horiz;
 }
 
 /// Full-frame overlay while the planner runs. Real calls take minutes, so the
@@ -441,81 +541,155 @@ class GeneratingOverlay extends StatelessWidget {
   }
 }
 
-/// Occupies the day-1 position while the trip has no dates. Flights set them,
-/// so this is where flights are offered — unmissable, and only while relevant.
+/// Occupies the day-1 position while the trip has no dates.
+///
+/// Three ways in, ordered by how much work each asks of the user rather than
+/// by how much the app would like them to do. Someone holding a booking has
+/// the answer already and should not be sent shopping; someone taking a train
+/// should not have to pretend to look at flights to get past this screen.
 class _NoDatesYet extends StatelessWidget {
   const _NoDatesYet({
+    required this.onEnterBookedFlight,
     required this.onOpenFlights,
+    required this.onSetDatesByHand,
     required this.onGoToGroup,
     required this.memberCount,
   });
 
+  final VoidCallback onEnterBookedFlight;
   final VoidCallback onOpenFlights;
+  final VoidCallback onSetDatesByHand;
   final VoidCallback onGoToGroup;
   final int memberCount;
 
   @override
   Widget build(BuildContext context) {
-    final theme = WayfareTheme.of(context);
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: WayfareColors.surface,
-              borderRadius: theme.cardLg,
-              border: Border.all(color: WayfareColors.borderSoft, width: 1.5),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.flight_takeoff,
-                        size: 20, color: WayfareColors.accent),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Text(
-                        'Flights — sets your dates',
-                        style: WayfareType.ui(16, weight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'The planner works from when you land and when you leave. '
-                  'Pick flights and the days fill in around them.',
-                  style: WayfareType.body(13.5, color: WayfareColors.subhead),
-                ),
-                const SizedBox(height: 16),
-                WayfarePrimaryButton(
-                  label: 'Find flights',
-                  onPressed: onOpenFlights,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
           Text(
-            memberCount < 2
-                ? 'You can add travellers first — the planner needs at least two.'
-                : 'Already booked? Set the dates by hand from the menu above.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12.5, color: WayfareColors.mutedLight),
+            'The planner builds around your dates. Where do yours come from?',
+            style: WayfareType.body(14, color: WayfareColors.subhead),
           ),
-          if (memberCount < 2) ...[
+          const SizedBox(height: WayfareSpace.sectionGap),
+          _StartOption(
+            icon: Icons.confirmation_number_outlined,
+            title: 'I have my flight booked',
+            body: 'Enter your flight number and we will fill in the dates from '
+                'the schedule — including how much of the first and last day '
+                'you actually get.',
+            cta: 'Enter flight number',
+            emphasis: true,
+            onTap: onEnterBookedFlight,
+          ),
+          const SizedBox(height: WayfareSpace.cardGap),
+          _StartOption(
+            icon: Icons.flight_takeoff,
+            title: "Haven't booked yet?",
+            body: 'Compare flights here and see what each one costs you in '
+                'trip time before you commit to it.',
+            cta: 'Search flights',
+            onTap: onOpenFlights,
+          ),
+          const SizedBox(height: WayfareSpace.cardGap),
+          _StartOption(
+            icon: Icons.directions_railway_outlined,
+            title: 'Not flying?',
+            body: 'Driving, training, already there — pick your dates and start '
+                'planning. Flights are one way to set them, not the only one.',
+            cta: 'Set dates myself',
+            onTap: onSetDatesByHand,
+          ),
+          if (memberCount == 0) ...[
+            const SizedBox(height: WayfareSpace.sectionGap),
+            Text(
+              'You can add travellers whenever you like — the plan gets more '
+              'tailored with them, and works without.',
+              textAlign: TextAlign.center,
+              style: WayfareType.body(12.5, color: WayfareColors.mutedLight),
+            ),
             const SizedBox(height: 12),
             WayfareSecondaryButton(
-              label: 'Go to the group',
+              label: 'Add who is coming',
               onPressed: onGoToGroup,
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// One route into a dated trip. [emphasis] marks the recommended one with a
+/// filled CTA — a preference, not a restriction.
+class _StartOption extends StatelessWidget {
+  const _StartOption({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.cta,
+    required this.onTap,
+    this.emphasis = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+  final String cta;
+  final bool emphasis;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = WayfareTheme.of(context);
+
+    return Material(
+      color: WayfareColors.surface,
+      borderRadius: theme.cardLg,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: theme.cardLg,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: theme.cardLg,
+            border: Border.all(
+              color: emphasis
+                  ? WayfareColors.borderChip
+                  : WayfareColors.borderSoft,
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 20, color: WayfareColors.accent),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: WayfareType.ui(16, weight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                body,
+                style: WayfareType.body(13.5, color: WayfareColors.subhead),
+              ),
+              const SizedBox(height: 16),
+              if (emphasis)
+                WayfarePrimaryButton(label: cta, onPressed: onTap)
+              else
+                WayfareSecondaryButton(label: cta, onPressed: onTap),
+            ],
+          ),
+        ),
       ),
     );
   }

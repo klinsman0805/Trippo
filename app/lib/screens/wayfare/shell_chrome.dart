@@ -19,6 +19,7 @@ class WayfareHeader extends StatelessWidget {
     required this.actionIcon,
     required this.actionLabel,
     required this.onAction,
+    this.onBack,
   });
 
   final String overline;
@@ -31,6 +32,10 @@ class WayfareHeader extends StatelessWidget {
   final IconData actionIcon;
   final String actionLabel;
   final VoidCallback onAction;
+
+  /// Back to the trip list. Null when this shell is the root — showing a back
+  /// button with nowhere to go is worse than showing none.
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +53,7 @@ class WayfareHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (onBack != null) _BackLink(onPressed: onBack!),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -109,6 +115,16 @@ class WayfareHeader extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 56),
         child: Row(
           children: [
+            if (onBack != null)
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: IconButton(
+                  onPressed: onBack,
+                  tooltip: 'Back to your trips',
+                  icon: const Icon(Icons.arrow_back, size: 22),
+                ),
+              ),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -148,6 +164,45 @@ class WayfareHeader extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// iOS back affordance: a text link in the accent colour, matching the pushed
+/// screens' `‹ Trip` rather than inventing a second back idiom.
+class _BackLink extends StatelessWidget {
+  const _BackLink({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Semantics(
+        button: true,
+        label: 'Back to your trips',
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.only(right: 10, bottom: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.chevron_left, size: 20, color: WayfareColors.accent),
+                Text(
+                  'Your trips',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: WayfareColors.accent,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

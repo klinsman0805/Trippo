@@ -1,6 +1,7 @@
 import type {
   AirportMatch,
   FlightItinerary,
+  FlightLookup,
   FlightOffer,
   FlightProvider,
   FlightSearch,
@@ -43,6 +44,7 @@ export class MockFlightProvider implements FlightProvider {
         id: `mock-${seed}-${i}`,
         provider: this.name,
         is_estimate: true,
+        booked: false,
         price_total: perTraveler * query.adults * (query.return_date ? 2 : 1),
         price_per_traveler: perTraveler * (query.return_date ? 2 : 1),
         currency: query.currency,
@@ -52,6 +54,48 @@ export class MockFlightProvider implements FlightProvider {
         last_ticketing_date: null,
       };
     });
+  }
+
+  /**
+   * A deterministic schedule for any well-formed flight number.
+   *
+   * The route is derived from the number itself, so `MH123` on a given date
+   * always returns the same thing — which is what makes the already-booked
+   * flow testable without credentials. Two carrier codes are treated as
+   * unknown on purpose (`ZZ` and `QQ`), because "we cannot find that flight"
+   * is a state the UI has to handle and an always-succeeding stub would hide.
+   */
+  async lookupFlight(query: FlightLookup): Promise<FlightItinerary | null> {
+    const carrier = query.flight_number.slice(0, 2);
+    if (carrier === 'ZZ' || carrier === 'QQ') return null;
+
+    const seed = hash(`${query.flight_number}${query.scheduled_date}`);
+    const origin = SAMPLE_AIRPORTS[seed % SAMPLE_AIRPORTS.length]!.iata;
+    let destination = SAMPLE_AIRPORTS[(seed >> 3) % SAMPLE_AIRPORTS.length]!.iata;
+    if (destination === origin) {
+      destination = SAMPLE_AIRPORTS[(seed + 1) % SAMPLE_AIRPORTS.length]!.iata;
+    }
+
+    const departMinutes = (seed % 20) * 60 + (seed % 4) * 15;
+    const legMinutes = 90 + (seed % 300);
+
+    return {
+      direction: query.direction,
+      duration_minutes: legMinutes,
+      stops: 0,
+      segments: [
+        {
+          origin,
+          destination,
+          departs_at: addMinutes(query.scheduled_date, departMinutes),
+          arrives_at: addMinutes(query.scheduled_date, departMinutes + legMinutes),
+          carrier_code: carrier,
+          flight_number: query.flight_number,
+          duration_minutes: legMinutes,
+          aircraft: null,
+        },
+      ],
+    };
   }
 
   async searchAirports(keyword: string): Promise<AirportMatch[]> {

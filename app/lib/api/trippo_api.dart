@@ -218,6 +218,25 @@ class TrippoApi {
     return FlightSearchResult.fromJson(json);
   }
 
+  /// Look up a flight the group has already booked.
+  ///
+  /// Returns null when the provider has no record of that number on that date
+  /// — a mistyped digit, usually. That is a normal answer the form shows
+  /// against the field, not an error, so it is not an exception.
+  Future<FlightOffer?> lookupFlight({
+    required String flightNumber,
+    required String scheduledDate,
+    String direction = 'outbound',
+  }) async {
+    final json = await _client.post('/flights/by-number', body: {
+      'flight_number': flightNumber,
+      'scheduled_date': scheduledDate,
+      'direction': direction,
+    });
+    final offer = json['offer'] as Map<String, dynamic>?;
+    return offer == null ? null : FlightOffer.fromJson(offer);
+  }
+
   /// What an offer would do to the trip, without committing to it. Feeds the
   /// consequence sheet, which confirms before the dates move.
   Future<DateEnvelope?> previewEnvelope(FlightOffer offer) async {

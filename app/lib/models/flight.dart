@@ -56,6 +56,7 @@ class FlightOffer {
     required this.id,
     required this.provider,
     required this.isEstimate,
+    required this.booked,
     required this.priceTotal,
     required this.pricePerTraveler,
     required this.currency,
@@ -71,6 +72,10 @@ class FlightOffer {
   /// When true the price is synthetic or from a sandbox environment. The UI
   /// MUST label these — presenting one as a bookable fare would be a lie.
   final bool isEstimate;
+
+  /// True when this came from a booking the group already holds. There is no
+  /// fare to show — they have already paid one, and we don't know what it was.
+  final bool booked;
   final num priceTotal;
   final num pricePerTraveler;
   final String currency;
@@ -114,6 +119,7 @@ class FlightOffer {
         id: json['id'] as String? ?? '',
         provider: json['provider'] as String? ?? '',
         isEstimate: json['is_estimate'] as bool? ?? true,
+        booked: json['booked'] as bool? ?? false,
         priceTotal: json['price_total'] as num? ?? 0,
         pricePerTraveler: json['price_per_traveler'] as num? ?? 0,
         currency: json['currency'] as String? ?? 'USD',

@@ -94,8 +94,8 @@ class _EmptyState extends StatelessWidget {
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 250),
             child: Text(
-              'Add each person with their own pace and needs — the planner '
-              'needs at least two to find compromises.',
+              'Optional, but this is where the planner earns its keep: give '
+              'it each person\'s pace and needs and it finds the compromises.',
               textAlign: TextAlign.center,
               style: WayfareType.body(13.5, color: WayfareColors.subhead),
             ),
@@ -198,20 +198,11 @@ class _MemberCard extends StatelessWidget {
                   label: controller.isReady
                       ? 'Regenerate itinerary'
                       : 'Generate itinerary',
-                  // Disabled under two travellers — there are no compromises
-                  // to find with one person.
                   onPressed: controller.canGenerate ? controller.generate : null,
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  controller.canGenerate
-                      ? [
-                          if (budget != null)
-                            '${formatMoney(budget, currency)} budget',
-                          if (destinations > 0)
-                            '$destinations ${destinations == 1 ? 'stop' : 'stops'}',
-                        ].join(' · ')
-                      : 'Two travellers minimum',
+                  _footnote(controller, budget, currency, destinations),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 12,
@@ -225,6 +216,33 @@ class _MemberCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What sits under the Generate button.
+///
+/// With one traveller this says what a second one would buy you, rather than
+/// refusing to plan. Travellers are what make the plan *tailored*; they are
+/// not what makes it possible.
+String _footnote(
+  WayfareController controller,
+  num? budget,
+  String currency,
+  int destinations,
+) {
+  if (!controller.canGenerate) {
+    return 'Add a destination first — the planner needs somewhere to go.';
+  }
+  if (controller.wouldBenefitFromTravellers) {
+    return controller.members.isEmpty
+        ? 'Plans fine without travellers. Add them and it works around each '
+            "person's pace and needs."
+        : 'Add a second traveller and the planner starts balancing between you.';
+  }
+  return [
+    if (budget != null) '${formatMoney(budget, currency)} budget',
+    if (destinations > 0)
+      '$destinations ${destinations == 1 ? 'stop' : 'stops'}',
+  ].join(' · ');
 }
 
 class _MemberRow extends StatelessWidget {
