@@ -96,8 +96,25 @@ Extractors are tried in registration order, first match wins:
 
 Scraped text goes to Gemini with an extraction prompt that is explicit about
 **not** inventing places — an empty result is the correct answer for a page with
-no concrete venues in it. Results land in the trip's candidate `places` pool,
-deduped by (name, city).
+no concrete venues in it. The response is constrained by a JSON Schema through
+structured outputs, so `{summary, planning_notes, places[]}` is guaranteed by
+construction rather than parsed out of prose. Results land in the trip's
+candidate `places` pool, deduped by (name, city).
+
+Two things a real import taught us, both fixed:
+
+- **The category enum offered `transport`**, so a city guide filed a bus
+  terminal, a coach operator and an intercity bus station as places to visit —
+  the exact thing the prompt forbids. A rule saying "skip bus depots" cannot
+  outweigh a schema saying "here is where to put them". The category is gone;
+  transport worth seeing for itself is a `sight` and has to justify that in
+  `why`.
+- **The 24k character cap silently ate the food.** Travel guides put Eat and
+  Drink near the *end*, so front-loaded truncation of a 54k-character page
+  returned one restaurant for a city famous for its cooking. The cap is now
+  100k, and anything longer keeps both ends rather than only the beginning.
+
+Together: 25 places → 78, food 1 → 33, logistics 4 → 0.
 
 **On 小红书 specifically:** XHS blocks unauthenticated server-side reads. Note
 pages are client-rendered behind a signed-request check, so a plain fetch
