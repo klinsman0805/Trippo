@@ -218,13 +218,22 @@ class DayCountSheet extends StatelessWidget {
     super.key,
     required this.envelope,
     required this.dayCount,
-    required this.onChangeFlights,
+    required this.day,
+    required this.activityCount,
+    required this.onDeleteDay,
     required this.onKeep,
   });
 
   final DateEnvelope? envelope;
   final int dayCount;
-  final VoidCallback onChangeFlights;
+
+  /// The day currently being looked at — the one that would go.
+  final int day;
+
+  /// How much is on it, so the confirmation can say what is lost.
+  final int activityCount;
+
+  final VoidCallback onDeleteDay;
   final VoidCallback onKeep;
 
   @override
@@ -233,12 +242,11 @@ class DayCountSheet extends StatelessWidget {
 
     return SheetFrame(
       children: [
-        Text('Adding or removing a day', style: WayfareType.display(22)),
+        Text('Removing a day', style: WayfareType.display(22)),
         const SizedBox(height: 8),
         Text(
-          'Your days come from your flights, so this trip is as long as the '
-          'time between them. Changing the number of days means changing those '
-          'dates.',
+          'Your days come from your flights, so the trip is as long as the '
+          'time between them. Removing a day shortens it.',
           style: WayfareType.body(13.5, color: WayfareColors.subhead),
         ),
         const SizedBox(height: 16),
@@ -289,18 +297,28 @@ class DayCountSheet extends StatelessWidget {
             border: Border.all(color: WayfareColors.amberBorder, width: 1.5),
           ),
           child: Text(
-            'A later return means a new fare to choose. Anything already '
-            'planned on days 1–$dayCount stays; a new day '
-            '${dayCount + 1} arrives empty.',
+            'Removing day $day shortens the trip to ${dayCount - 1} days and '
+            'moves your return a day earlier. The flight you have booked does '
+            'not change — you would need to change that with the airline.',
             style: WayfareType.body(13, color: WayfareColors.amberInk),
           ),
         ),
         const SizedBox(height: 16),
-        WayfarePrimaryButton(
-          label: 'Change the flight dates',
-          onPressed: onChangeFlights,
+        WayfareSecondaryButton(
+          label: 'Delete day $day',
+          onPressed: dayCount > 1 ? () => _confirm(context) : null,
           minHeight: WayfareTouch.sheetCta,
+          fontSize: 15,
+          foreground: WayfareColors.destructiveInk,
         ),
+        if (dayCount <= 1) ...[
+          const SizedBox(height: 8),
+          Text(
+            'A trip needs at least one day.',
+            textAlign: TextAlign.center,
+            style: WayfareType.body(12.5, color: WayfareColors.mutedLight),
+          ),
+        ],
         const SizedBox(height: 10),
         WayfareSecondaryButton(
           label: 'Keep the $dayCount days',
@@ -311,5 +329,26 @@ class DayCountSheet extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+extension on DayCountSheet {
+  /// Removing a day is irreversible and takes whatever was on it, so it asks
+  /// first and names the loss rather than the action.
+  Future<void> _confirm(BuildContext context) async {
+    final confirmed = await confirmDestructive(
+      context,
+      title: 'Delete day $day?',
+      body: activityCount == 0
+          ? 'The trip becomes ${dayCount - 1} days and your return moves a day '
+              'earlier. Nothing is planned on this day.'
+          : 'The trip becomes ${dayCount - 1} days and your return moves a day '
+              'earlier. The $activityCount '
+              '${activityCount == 1 ? 'activity' : 'activities'} on this day '
+              'go with it.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep it',
+    );
+    if (confirmed) onDeleteDay();
   }
 }

@@ -10,38 +10,6 @@ import '../../state/wayfare_controller.dart';
 import 'formatting.dart';
 import 'itinerary/day_editing.dart';
 
-/// The bar pinned above the nav while reading a day.
-///
-/// Was at the end of the scroll, which meant reaching it required scrolling
-/// past everything on a full day — the one point at which you are least
-/// likely to still want it.
-class DayActionBar extends StatelessWidget {
-  const DayActionBar({super.key, required this.controller});
-
-  final WayfareController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final day = controller.currentDay;
-    if (day == null || controller.isEditingDay) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      decoration: const BoxDecoration(
-        color: WayfareColors.bgApp,
-        border: Border(top: BorderSide(color: WayfareColors.hairline)),
-      ),
-      child: WayfareSecondaryButton(
-        label: 'Edit this day',
-        onPressed: () => controller.startEditingDay(day.day.toInt()),
-        fontSize: 14,
-        foreground: WayfareColors.ink,
-        background: WayfareColors.surface,
-      ),
-    );
-  }
-}
-
 /// Trip tab: one day at a time behind a horizontal day-chip scroller.
 class TripTab extends StatelessWidget {
   const TripTab({
@@ -95,17 +63,11 @@ class TripTab extends StatelessWidget {
               key: ValueKey(controller.selectedDay),
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (controller.isEditingDay)
-                  DayEditingBar(
-                    day: day.day.toInt(),
-                    onDone: controller.stopEditingDay,
-                  ),
                 if (controller.updatedDay == day.day) _updatedNotice(theme),
                 if (controller.dateEnvelope?.shortDayFor(day.day) case final short?)
                   ShortDayBand(
                     short: short,
                     flightLabel: controller.flightLabelFor(short),
-                    onSeeOtherFlights: controller.onSeeOtherFlights,
                   ),
                 _dayMeta(day, currency),
                 const SizedBox(height: 10),
@@ -128,37 +90,25 @@ class TripTab extends StatelessWidget {
                 // A short day says why it is short rather than being padded.
                 if (controller.dateEnvelope?.shortDayFor(day.day) case final short?)
                   _EmptySlotRow(short: short),
-                if (!controller.dayIsEmpty(day)) ...[
-                  if (controller.isEditingDay) ...[
-                    for (final slot in controller.openSlots) ...[
-                      AddSlotRow(
-                        slot: slot,
-                        onAdd: () => onAddActivity(slot),
-                      ),
-                      const SizedBox(height: WayfareSpace.cardGap),
-                    ],
-                  ] else
-                    OpenSlotLine(
-                      slots: controller.openSlots,
-                      onTap: () =>
-                          controller.startEditingDay(day.day.toInt()),
-                    ),
-                ],
+                if (!controller.dayIsEmpty(day))
+                  for (final slot in controller.openSlots) ...[
+                    AddSlotRow(slot: slot, onAdd: () => onAddActivity(slot)),
+                    const SizedBox(height: WayfareSpace.cardGap),
+                  ],
                 const SizedBox(height: 2),
-                if (controller.isEditingDay) ...[
-                  WayfarePrimaryButton(
-                    label: 'Add an activity',
-                    onPressed: () => onAddActivity(TimeOfDay.anytime),
-                  ),
-                  const SizedBox(height: 10),
-                  WayfareSecondaryButton(
-                    label: 'Add or remove a day',
-                    onPressed: onChangeDayCount,
-                    fontSize: 13.5,
-                    foreground: WayfareColors.muted,
-                  ),
-                  const SizedBox(height: 10),
-                ] else if (day.blocks.any((b) => b.optional)) ...[
+                WayfarePrimaryButton(
+                  label: 'Add an activity',
+                  onPressed: () => onAddActivity(TimeOfDay.anytime),
+                ),
+                const SizedBox(height: 10),
+                WayfareSecondaryButton(
+                  label: 'Add or remove a day',
+                  onPressed: onChangeDayCount,
+                  fontSize: 13.5,
+                  foreground: WayfareColors.muted,
+                ),
+                const SizedBox(height: 10),
+                if (day.blocks.any((b) => b.optional)) ...[
                   // Only offered when there is something optional to hide;
                   // otherwise it is a control that does nothing.
                   WayfareSecondaryButton(
@@ -182,29 +132,13 @@ class TripTab extends StatelessWidget {
 
   /// The day's activities, grouped by slot.
   ///
-  /// Reading mode is a plain column. Edit mode makes each slot its own
-  /// reorderable list, because a drag may only rearrange siblings — dragging
-  /// across a slot boundary would silently change what part of the day an
-  /// activity belongs to, which is the slot's decision, not the finger's.
+  /// There is no edit mode: every card is draggable and swipeable all the
+  /// time. Each slot is its own reorderable list, because a drag may only
+  /// rearrange siblings — dragging across a slot boundary would silently
+  /// change what part of the day an activity belongs to, which is the slot's
+  /// decision, not the finger's.
   List<Widget> _slotGroups(String currency) {
     final blocks = controller.visibleBlocks;
-
-    if (!controller.isEditingDay) {
-      return [
-        for (final block in blocks) ...[
-          SwipeableActivity(
-            onEdit: () => onEditActivity(block),
-            onDelete: () => onRemoveActivity(block),
-            child: ActivityCard(
-              block: block,
-              members: controller.members,
-              currency: currency,
-            ),
-          ),
-          const SizedBox(height: WayfareSpace.cardGap),
-        ],
-      ];
-    }
 
     const order = [
       TimeOfDay.morning,
@@ -758,12 +692,10 @@ class ShortDayBand extends StatelessWidget {
     super.key,
     required this.short,
     this.flightLabel,
-    this.onSeeOtherFlights,
   });
 
   final ShortDay short;
   final String? flightLabel;
-  final VoidCallback? onSeeOtherFlights;
 
   @override
   Widget build(BuildContext context) {
@@ -801,19 +733,6 @@ class ShortDayBand extends StatelessWidget {
             'pretending it exists.',
             style: WayfareType.body(13.5, color: WayfareColors.amberInk),
           ),
-          if (onSeeOtherFlights != null) ...[
-            const SizedBox(height: 14),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: WayfareSecondaryButton(
-                label: 'See other flights',
-                onPressed: onSeeOtherFlights,
-                minHeight: WayfareTouch.ios,
-                fontSize: 13.5,
-                foreground: WayfareColors.amberButtonInk,
-              ),
-            ),
-          ],
         ],
       ),
     );

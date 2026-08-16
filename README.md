@@ -393,6 +393,18 @@ day is exactly the bug that would follow.
 activity with no part of the day cannot be reasoned about when working out what
 a flight leaves usable.
 
+**There is no edit mode.** Cards are draggable and swipeable all the time:
+long-press the grip to rearrange within a slot, swipe left for edit and
+delete. The grip uses a *delayed* drag rather than an immediate one — an
+immediate drag competes with the page's own vertical scroll for the same
+gesture and loses more often than it wins, which is why dragging appeared to
+do nothing.
+
+**The itinerary reconciles against the trip's dates on read, not only on
+write.** Fixing it when flights change repairs it going forward, but a plan
+that fell out of step earlier stays wrong forever with no way to ask for a
+recheck. The check is idempotent, so a healthy plan costs one comparison.
+
 **Order within a slot is the array order.** Nothing stores an explicit index —
 the stored array *is* the order, so a drag cannot drift out of sync with what
 is rendered. The day sort is by slot only and JS sorts are stable, which is

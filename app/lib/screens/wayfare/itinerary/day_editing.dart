@@ -6,146 +6,7 @@ import '../../../design/widgets.dart';
 import '../../../models/plan.dart';
 import '../formatting.dart';
 
-/// The bar that says a day is live.
-///
-/// Edit mode is per-day and announced, because the alternative — cards that
-/// are always tappable — makes reading a plan feel risky. Nothing about the
-/// card changes; only what surrounds it.
-class DayEditingBar extends StatelessWidget {
-  const DayEditingBar({super.key, required this.day, required this.onDone});
-
-  final int day;
-  final VoidCallback onDone;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = WayfareTheme.of(context);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-      decoration: BoxDecoration(
-        color: WayfareColors.ink,
-        borderRadius: theme.card,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Editing day $day — tap an activity to change it',
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.35,
-                color: WayfareColors.generatingInk,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: onDone,
-            child: const Text(
-              'Done',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: WayfareColors.surface,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The one-line composer: the fastest way to get a list of things down.
-///
-/// Six activities is six taps and no sheet. Anything else about them can be
-/// filled in later by tapping the card, which is why a title-only activity has
-/// to render as a complete card rather than a stub.
-class QuickAddComposer extends StatelessWidget {
-  const QuickAddComposer({
-    super.key,
-    required this.controller,
-    required this.slot,
-    required this.value,
-    required this.onChanged,
-    required this.onSubmit,
-    required this.onOpenFullSheet,
-  });
-
-  final TextEditingController controller;
-
-  /// Where a quick-added activity lands — the slot currently being looked at.
-  final TimeOfDay slot;
-  final String value;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onSubmit;
-  final VoidCallback onOpenFullSheet;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = WayfareTheme.of(context);
-    final ready = value.trim().isNotEmpty;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: WayfareColors.surface,
-        borderRadius: theme.card,
-        border: Border.all(color: WayfareColors.borderSoft),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: WayfareTextField(
-                  controller: controller,
-                  hint: 'Type an activity…',
-                  onChanged: onChanged,
-                  onSubmitted: (_) => ready ? onSubmit() : null,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Opacity(
-                opacity: ready ? 1 : 0.45,
-                child: WayfarePrimaryButton(
-                  label: 'Add',
-                  onPressed: ready ? onSubmit : null,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 9),
-          Text(
-            'Lands in the ${_slotLabel(slot)} you are looking at. Tap it '
-            'afterwards to add a time, venue or cost.',
-            style: WayfareType.body(12.5, color: WayfareColors.mutedLight),
-          ),
-          const SizedBox(height: 12),
-          WayfareSecondaryButton(
-            label: 'Add with time, venue and cost',
-            onPressed: onOpenFullSheet,
-            minHeight: WayfareTouch.ios,
-            fontSize: 13.5,
-            foreground: WayfareColors.inkSecondary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _slotLabel(TimeOfDay slot) => switch (slot) {
-        TimeOfDay.morning => 'morning',
-        TimeOfDay.afternoon => 'afternoon',
-        TimeOfDay.evening => 'evening',
-        TimeOfDay.anytime => 'part of the day',
-      };
-}
-
-/// A dashed row standing in for a slot with nothing in it, in edit mode.
+/// A dashed row standing in for a slot with nothing in it.
 class AddSlotRow extends StatelessWidget {
   const AddSlotRow({super.key, required this.slot, required this.onAdd});
 
@@ -575,7 +436,11 @@ class ReorderGrip extends StatelessWidget {
     return Semantics(
       button: true,
       label: 'Reorder — $positionLabel',
-      child: ReorderableDragStartListener(
+      // Delayed, not immediate. An immediate drag competes with the page's own
+      // vertical scroll for the same gesture and loses as often as it wins —
+      // which is why dragging appeared not to work at all. A long press is
+      // something the scroll view cannot claim, so the pick-up is reliable.
+      child: ReorderableDelayedDragStartListener(
         index: index,
         child: PopupMenuButton<int>(
           tooltip: 'Reorder within this part of the day',

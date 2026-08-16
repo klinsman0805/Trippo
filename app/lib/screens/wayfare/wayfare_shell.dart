@@ -120,13 +120,6 @@ class _WayfareShellState extends State<WayfareShell> {
         ),
         if (_controller.tab == WayfareTab.chat)
           RefineComposer(controller: _controller),
-        // Pinned above the nav rather than buried at the end of the day's
-        // scroll, which is exactly where it stops being reachable.
-        if (_controller.tab == WayfareTab.itinerary &&
-            _controller.hasPlan &&
-            !_controller.isFailed &&
-            !_controller.needsInfo)
-          DayActionBar(controller: _controller),
         WayfareNavBar(
           current: _controller.tab,
           onSelect: _controller.goTo,
@@ -330,7 +323,6 @@ class _WayfareShellState extends State<WayfareShell> {
   Future<void> _startFromScratch() async {
     await _controller.startBlankItinerary();
     if (!mounted) return;
-    _controller.startEditingDay(_controller.selectedDay);
     await _openAddActivity(TimeOfDay.morning);
   }
 
@@ -417,10 +409,12 @@ class _WayfareShellState extends State<WayfareShell> {
       DayCountSheet(
         envelope: _controller.dateEnvelope,
         dayCount: _controller.plan?.itinerary.length ?? 0,
+        day: _controller.selectedDay,
+        activityCount: _controller.currentDay?.blocks.length ?? 0,
         onKeep: () => Navigator.of(context).pop(),
-        onChangeFlights: () {
+        onDeleteDay: () {
           Navigator.of(context).pop();
-          _openFlights();
+          _controller.deleteDay(_controller.selectedDay);
         },
       ),
     );
@@ -526,8 +520,7 @@ class _WayfareShellState extends State<WayfareShell> {
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _controller.goTo(WayfareTab.itinerary);
-                  _controller.startEditingDay(_controller.selectedDay);
-                },
+                              },
               ),
             // This is where regenerating lives now that the header icon no
             // longer implies it. Labelled, so it cannot be hit by accident.

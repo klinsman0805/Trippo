@@ -69,15 +69,6 @@ class WayfareController extends ChangeNotifier {
   /// The traveller whose edit sheet is open, if any.
   String? editingMemberId;
 
-  /// Which day is in edit mode, or null for reading.
-  ///
-  /// Per-day rather than global, per the design: reading a plan must stay
-  /// risk-free, and an always-live card makes every scroll a near-miss.
-  int? dayEditing;
-
-  /// The one-line composer's text while in edit mode.
-  String quickEntry = '';
-
   /// Set while an edit is in flight, so a double-tap cannot fire twice.
   bool savingActivity = false;
 
@@ -307,42 +298,6 @@ class WayfareController extends ChangeNotifier {
 
   // --- editing the itinerary by hand ---
 
-  bool get isEditingDay => dayEditing != null && dayEditing == selectedDay;
-
-  void startEditingDay(int day) {
-    dayEditing = day;
-    quickEntry = '';
-    notifyListeners();
-  }
-
-  void stopEditingDay() {
-    dayEditing = null;
-    quickEntry = '';
-    notifyListeners();
-  }
-
-  void setQuickEntry(String value) {
-    quickEntry = value;
-    notifyListeners();
-  }
-
-  /// The fastest path: a title, and nothing else.
-  ///
-  /// Lands in the slot the user is looking at, which is what the composer's
-  /// note promises. A one-line activity is a complete activity — everything
-  /// else can be filled in later by tapping it.
-  Future<void> addQuickActivity(TimeOfDay slot) async {
-    final title = quickEntry.trim();
-    if (title.isEmpty || savingActivity) return;
-
-    await _editPlan(() => _api.addActivity(tripId, selectedDay, {
-          'activity': title,
-          'time_of_day': timeOfDayTo(slot),
-        }));
-    quickEntry = '';
-    notifyListeners();
-  }
-
   /// "Build it by hand" — days with nothing in them, ready to fill.
   Future<void> startBlankItinerary() async {
     try {
@@ -383,6 +338,19 @@ class WayfareController extends ChangeNotifier {
     await generate();
   }
 
+  /// Remove a day. The trip gets a day shorter, and the days after renumber.
+  Future<void> deleteDay(int day) async {
+    await _editPlan(() => _api.deleteDay(tripId, day));
+    // The trip's own dates moved, so the header and chips need the new ones.
+    try {
+      trip = await _api.getTrip(tripId);
+    } on ApiException catch (e) {
+      error = e.message;
+    }
+    _clampSelectedDay();
+    notifyListeners();
+  }
+
   Future<void> addActivity(int day, Map<String, dynamic> activity) =>
       _editPlan(() => _api.addActivity(tripId, day, activity));
 
@@ -405,7 +373,6 @@ class WayfareController extends ChangeNotifier {
         ));
     // Follow the activity, so the move is visible rather than taken on trust.
     selectedDay = day;
-    dayEditing = day;
     notifyListeners();
   }
 

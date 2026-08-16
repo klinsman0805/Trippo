@@ -6,6 +6,8 @@ import { listAcknowledged, setAcknowledged } from './conflicts.js';
 import {
   addBlock,
   createBlankPlan,
+  deleteDay,
+  reconcileDays,
   reorderBlock,
   moveBlock,
   pinnedSummary,
@@ -48,6 +50,14 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { id: string } }>('/trips/:id/plan', async (req) => {
     getTrip(req.params.id);
+    // Repair on read, not only on write.
+    //
+    // Reconciling when flights change fixes it going forward, but a plan that
+    // fell out of step before that — or through any path that moves the trip's
+    // dates without touching flights — stays wrong forever, and the user has
+    // no way to ask for it to be rechecked. This is idempotent and returns
+    // null when there is nothing to do, so a healthy plan costs one comparison.
+    reconcileDays(req.params.id);
     const record = getLatestPlan(req.params.id);
     if (!record) {
       throw notFound('no_plan_yet', 'This trip has no plan yet. POST to this path to create one.');
@@ -170,6 +180,20 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
     reply.code(201);
     return { plan: record.plan };
   });
+
+  /**
+   * Remove a day and shorten the trip with it.
+   *
+   * The flight is not rebooked — the airline knows nothing about this — so the
+   * client says so before asking.
+   */
+  app.delete<{ Params: { id: string; day: string } }>(
+    '/trips/:id/plan/days/:day',
+    async (req) => {
+      getTrip(req.params.id);
+      return { plan: deleteDay(req.params.id, Number(req.params.day)) };
+    },
+  );
 
   const SlotSchema = z.enum(['morning', 'afternoon', 'evening', 'anytime']);
 

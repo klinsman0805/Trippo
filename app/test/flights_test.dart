@@ -318,11 +318,7 @@ void main() {
 
       await pump(
         tester,
-        ShortDayBand(
-          short: short,
-          flightLabel: 'Flight MH123',
-          onSeeOtherFlights: () {},
-        ),
+        ShortDayBand(short: short, flightLabel: 'Flight MH123'),
       );
 
       expect(find.text('SHORT DAY · FLIGHT MH123'), findsOneWidget);
@@ -335,7 +331,9 @@ void main() {
         find.textContaining('rather than pretending it exists'),
         findsOneWidget,
       );
-      expect(find.text('See other flights'), findsOneWidget);
+      // The band explains the constraint; it does not also try to sell a
+      // different flight from inside the itinerary.
+      expect(find.text('See other flights'), findsNothing);
     });
   });
 

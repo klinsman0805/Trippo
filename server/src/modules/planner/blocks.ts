@@ -1,7 +1,7 @@
 import { db, newId, nowIso } from '../../db/index.js';
 import { badRequest, notFound } from '../../lib/errors.js';
 import type { Plan, PlanBlock } from '../../schemas/plan.js';
-import { getTrip } from '../trips/repo.js';
+import { getTrip, updateTrip } from '../trips/repo.js';
 import { getLatestPlan, type PlanRecord } from './service.js';
 
 /**
@@ -102,6 +102,52 @@ export function createBlankPlan(tripId: string): PlanRecord {
   ).run(id, tripId, 1, 'complete', '', JSON.stringify(plan), 'hand-written', null, nowIso());
 
   return getLatestPlan(tripId)!;
+}
+
+/**
+ * Remove one day, and shorten the trip to match.
+ *
+ * Both halves are required. Dropping the day alone would leave the trip's
+ * dates a day longer, and the next reconcile — triggered by any flight change
+ * — would put an empty day straight back.
+ *
+ * The trip's *end* moves, never its start: a day removed from the middle
+ * renumbers what follows, which is the same shape as losing the last day.
+ */
+export function deleteDay(tripId: string, day: number): Plan {
+  const record = loadPlan(tripId);
+  const plan = record.plan;
+  ensureBlockIds(plan);
+
+  if (plan.itinerary.length <= 1) {
+    throw badRequest('last_day', 'A trip needs at least one day.');
+  }
+  if (!plan.itinerary.some((d) => d.day === day)) {
+    throw badRequest('day_not_found', `This trip has no day ${day}.`);
+  }
+
+  plan.itinerary = plan.itinerary.filter((d) => d.day !== day);
+
+  const trip = getTrip(tripId);
+  if (trip.start_date && trip.end_date) {
+    const end = Date.parse(`${trip.end_date}T00:00:00Z`) - 86_400_000;
+    const newEnd = new Date(end).toISOString().slice(0, 10);
+    updateTrip(tripId, { end_date: newEnd });
+    plan.trip.end_date = newEnd;
+
+    const dates = daysBetween(trip.start_date, newEnd);
+    plan.itinerary.forEach((d, i) => {
+      d.day = i + 1;
+      d.date = dates[i] ?? null;
+    });
+  } else {
+    plan.itinerary.forEach((d, i) => {
+      d.day = i + 1;
+    });
+  }
+
+  plan.trip.duration_days = plan.itinerary.length;
+  return persist(record, plan);
 }
 
 /**
