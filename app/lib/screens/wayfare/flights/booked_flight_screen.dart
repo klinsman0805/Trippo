@@ -48,6 +48,14 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
   final _outboundNumber = TextEditingController();
   final _returnNumber = TextEditingController();
 
+  /// The numbers as they were when "Find my flight" was last pressed.
+  ///
+  /// The date questions read these rather than the live fields: a heading that
+  /// rewrites itself on every keystroke is noise, and half a flight number in
+  /// a question reads as a bug.
+  String? _confirmedOutbound;
+  String? _confirmedReturn;
+
   DateTime? _outboundDate;
   DateTime? _returnDate;
 
@@ -69,8 +77,9 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
   @override
   void initState() {
     super.initState();
+    // Only the CTA's enabled state depends on the text, so this is the one
+    // thing that rebuilds as they type.
     _outboundNumber.addListener(() => setState(() {}));
-    _returnNumber.addListener(() => setState(() {}));
   }
 
   @override
@@ -80,8 +89,10 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
     super.dispose();
   }
 
-  bool get _hasOutboundNumber => _outboundNumber.text.trim().isNotEmpty;
-  bool get _hasReturnNumber => _returnNumber.text.trim().isNotEmpty;
+  String get _typedOutbound => _outboundNumber.text.trim().toUpperCase();
+  String get _typedReturn => _returnNumber.text.trim().toUpperCase();
+
+  bool get _hasReturnNumber => (_confirmedReturn ?? '').isNotEmpty;
 
   /// The return can't leave before the outbound lands.
   DateTime get _earliestReturn => _outboundDate ?? _today;
@@ -133,14 +144,13 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
           }),
         ))
         ..add(const SizedBox(height: WayfareSpace.cardGap));
-    } else if (_hasOutboundNumber) {
+    } else if (_confirmedOutbound != null) {
       steps
         ..add(_dateStep(
           context,
           leg: _Leg.outbound,
           eyebrow: 'Getting there',
-          question: 'When does ${_outboundNumber.text.trim().toUpperCase()} '
-              'take off?',
+          question: 'When does $_confirmedOutbound take off?',
           selected: _outboundDate,
         ))
         ..add(const SizedBox(height: WayfareSpace.cardGap));
@@ -181,8 +191,7 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
             context,
             leg: _Leg.back,
             eyebrow: 'Coming back',
-            question: 'When does ${_returnNumber.text.trim().toUpperCase()} '
-                'take off?',
+            question: 'When does $_confirmedReturn take off?',
             selected: _returnDate,
           ))
           ..add(const SizedBox(height: WayfareSpace.cardGap));
@@ -248,9 +257,47 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
             optional: true,
             enabled: _back == null,
           ),
+          const SizedBox(height: 16),
+          WayfarePrimaryButton(
+            label: 'Find my flight',
+            onPressed: _typedOutbound.isEmpty ? null : _findMyFlight,
+          ),
         ],
       ),
     );
+  }
+
+  /// Start the lookup with whatever is in the fields right now.
+  ///
+  /// Pressing this again after changing a number redoes only the leg that
+  /// actually changed — retyping the return should not throw away an outbound
+  /// that was already confirmed.
+  void _findMyFlight() {
+    final outboundChanged = _typedOutbound != _confirmedOutbound;
+
+    setState(() {
+      _error = null;
+      _options = const [];
+      _awaitingChoice = null;
+
+      if (outboundChanged) {
+        _confirmedOutbound = _typedOutbound;
+        _outboundDate = null;
+        _outbound = null;
+        _returnDate = null;
+        _back = null;
+        _returnSettled = false;
+      }
+
+      final typedReturn = _typedReturn;
+      if (typedReturn != _confirmedReturn) {
+        _confirmedReturn = typedReturn.isEmpty ? null : typedReturn;
+        _returnDate = null;
+        _back = null;
+        // A return number typed after skipping means they changed their mind.
+        if (typedReturn.isNotEmpty) _returnSettled = false;
+      }
+    });
   }
 
   Widget _numberField({
@@ -304,14 +351,8 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
     required String question,
     required DateTime? selected,
   }) {
-    final earliest = leg == _Leg.back ? _earliestReturn : null;
-    final today = _today;
-    final tomorrow = today.add(const Duration(days: 1));
-
-    // A return cannot precede the outbound, so those shortcuts are withheld
-    // rather than offered and then rejected.
-    final showToday = earliest == null || !today.isBefore(earliest);
-    final showTomorrow = earliest == null || !tomorrow.isBefore(earliest);
+    final selectedLabel =
+        selected == null ? 'Choose a date' : formatLongDate(selected);
 
     return WayfareCard(
       padding: const EdgeInsets.all(16),
@@ -329,34 +370,12 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
             ),
           ),
           const SizedBox(height: 13),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (showToday)
-                WayfareSelectChip(
-                  label: 'Today',
-                  selected: selected == today,
-                  onTap: () => _pickDate(leg, today),
-                ),
-              if (showTomorrow)
-                WayfareSelectChip(
-                  label: 'Tomorrow',
-                  selected: selected == tomorrow,
-                  onTap: () => _pickDate(leg, tomorrow),
-                ),
-              WayfareSelectChip(
-                label: selected != null &&
-                        selected != today &&
-                        selected != tomorrow
-                    ? formatLongDate(selected)
-                    : 'Choose a date',
-                selected: selected != null &&
-                    selected != today &&
-                    selected != tomorrow,
-                onTap: () => _openDatePicker(context, leg),
-              ),
-            ],
+          // No "today" or "tomorrow" shortcuts: trips are planned weeks out,
+          // so those would be the two dates nobody picks.
+          WayfareSecondaryButton(
+            label: selectedLabel,
+            onPressed: () => _openDatePicker(context, leg),
+            minHeight: WayfareTouch.input,
           ),
           if (leg == _Leg.back) ...[
             const SizedBox(height: 10),

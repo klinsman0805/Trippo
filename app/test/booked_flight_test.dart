@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
@@ -137,10 +138,36 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Types the outbound number and starts the lookup.
+  Future<void> findFlight(
+    WidgetTester tester,
+    String outbound, {
+    String? back,
+  }) async {
+    await tester.enterText(find.byType(TextField).first, outbound);
+    if (back != null) {
+      await tester.enterText(find.byType(TextField).last, back);
+    }
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Find my flight'));
+    await tester.pumpAndSettle();
+  }
+
   Future<void> tapDown(WidgetTester tester, Finder finder) async {
     await tester.ensureVisible(finder);
     await tester.pumpAndSettle();
     await tester.tap(finder);
+    await tester.pumpAndSettle();
+  }
+
+  /// Opens the platform picker and accepts the date it opens on.
+  ///
+  /// Deliberately does not spin the wheel: what matters here is the flow and
+  /// the bounds, and the bound is asserted directly off the widget rather
+  /// than by trying to scroll past it.
+  Future<void> pickDate(WidgetTester tester) async {
+    await tapDown(tester, find.text('Choose a date'));
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
   }
 
@@ -151,29 +178,45 @@ void main() {
     expect(find.textContaining('Dates come next'), findsOneWidget);
 
     // No date question yet — nothing to date.
-    expect(find.text('Today'), findsNothing);
     expect(find.text('Choose a date'), findsNothing);
   });
 
-  testWidgets('the date step appears once a number is typed, with shortcuts',
+  testWidgets('the date step waits for the button, not for typing',
       (tester) async {
     await pump(tester, api());
 
+    await tester.enterText(find.byType(TextField).first, 'AK89');
+    await tester.pumpAndSettle();
+
+    // A heading that rewrites itself mid-number reads as a bug.
+    expect(find.textContaining('take off?'), findsNothing);
+    expect(find.text('Choose a date'), findsNothing);
+
     await tester.enterText(find.byType(TextField).first, 'AK892');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Find my flight'));
     await tester.pumpAndSettle();
 
     expect(find.text('When does AK892 take off?'), findsOneWidget);
-    expect(find.text('Today'), findsOneWidget);
-    expect(find.text('Tomorrow'), findsOneWidget);
     expect(find.text('Choose a date'), findsOneWidget);
+    // Trips are planned weeks out, so these would be the two dates nobody picks.
+    expect(find.text('Today'), findsNothing);
+    expect(find.text('Tomorrow'), findsNothing);
+  });
+
+  testWidgets('the button is dead until there is a number', (tester) async {
+    await pump(tester, api());
+
+    await tester.tap(find.text('Find my flight'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('take off?'), findsNothing);
   });
 
   testWidgets('picking a date lists that day\'s departures, no price',
       (tester) async {
     await pump(tester, api());
-    await tester.enterText(find.byType(TextField).first, 'AK892');
-    await tester.pumpAndSettle();
-    await tapDown(tester, find.text('Today'));
+    await findFlight(tester, 'AK892');
+    await pickDate(tester);
 
     expect(lookups.single['flight_number'], 'AK892');
     expect(lookups.single['direction'], 'outbound');
@@ -188,9 +231,8 @@ void main() {
   testWidgets('two departures are both offered and one must be chosen',
       (tester) async {
     await pump(tester, api(departuresPerDay: 2));
-    await tester.enterText(find.byType(TextField).first, 'AK892');
-    await tester.pumpAndSettle();
-    await tapDown(tester, find.text('Today'));
+    await findFlight(tester, 'AK892');
+    await pickDate(tester);
 
     expect(find.textContaining('AK892 flies 2 times that day'), findsOneWidget);
     expect(find.text('16:55 → 18:05'), findsOneWidget);
@@ -202,9 +244,8 @@ void main() {
   testWidgets('choosing a departure then prompts about the return',
       (tester) async {
     await pump(tester, api());
-    await tester.enterText(find.byType(TextField).first, 'AK892');
-    await tester.pumpAndSettle();
-    await tapDown(tester, find.text('Today'));
+    await findFlight(tester, 'AK892');
+    await pickDate(tester);
     await tapDown(tester, find.text('16:55 → 18:05'));
 
     expect(find.text('Flying back?'), findsOneWidget);
@@ -217,9 +258,8 @@ void main() {
 
   testWidgets('skipping the return goes straight to confirming', (tester) async {
     await pump(tester, api());
-    await tester.enterText(find.byType(TextField).first, 'AK892');
-    await tester.pumpAndSettle();
-    await tapDown(tester, find.text('Today'));
+    await findFlight(tester, 'AK892');
+    await pickDate(tester);
     await tapDown(tester, find.text('16:55 → 18:05'));
     await tapDown(tester, find.text('Skip for now'));
 
@@ -234,12 +274,8 @@ void main() {
   testWidgets('a return leg is dated separately and cannot precede the outbound',
       (tester) async {
     await pump(tester, api());
-
-    await tester.enterText(find.byType(TextField).first, 'AK892');
-    await tester.enterText(find.byType(TextField).last, 'AK893');
-    await tester.pumpAndSettle();
-
-    await tapDown(tester, find.text('Today'));
+    await findFlight(tester, 'AK892', back: 'AK893');
+    await pickDate(tester);
     await tapDown(tester, find.text('16:55 → 18:05'));
 
     // Having typed a return number, the prompt is skipped for its date step.
@@ -251,7 +287,18 @@ void main() {
       reason: 'the return cannot leave before the outbound arrives',
     );
 
-    await tapDown(tester, find.text('Tomorrow'));
+    // And the picker itself enforces it, not just the sentence under it.
+    await tapDown(tester, find.text('Choose a date'));
+    final picker = tester.widget<CupertinoDatePicker>(
+      find.byType(CupertinoDatePicker),
+    );
+    final outboundDay = DateTime.parse(
+      lookups.first['scheduled_date'] as String,
+    );
+    expect(picker.minimumDate, outboundDay);
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
     expect(lookups.last['direction'], 'return');
     // The return's own local time, not converted into the outbound's zone.
     expect(find.text('18:45 → 21:50'), findsOneWidget);
@@ -265,9 +312,8 @@ void main() {
   testWidgets('an unknown number fails against the field, not as an outage',
       (tester) async {
     await pump(tester, api(departuresPerDay: 0));
-    await tester.enterText(find.byType(TextField).first, 'ZZ999');
-    await tester.pumpAndSettle();
-    await tapDown(tester, find.text('Today'));
+    await findFlight(tester, 'ZZ999');
+    await pickDate(tester);
 
     expect(find.textContaining("We can't find ZZ999"), findsOneWidget);
     expect(
@@ -280,9 +326,8 @@ void main() {
   testWidgets('a chosen leg can be changed without starting over',
       (tester) async {
     await pump(tester, api());
-    await tester.enterText(find.byType(TextField).first, 'AK892');
-    await tester.pumpAndSettle();
-    await tapDown(tester, find.text('Today'));
+    await findFlight(tester, 'AK892');
+    await pickDate(tester);
     await tapDown(tester, find.text('16:55 → 18:05'));
 
     expect(find.text('Change'), findsOneWidget);

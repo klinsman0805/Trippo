@@ -260,10 +260,15 @@ much work each asks rather than by what the app would prefer you did:
 
 1. **"I have my flight booked"** — the flight number first, dates after.
    Someone holding a booking has the answer already and should not be sent
-   shopping. The flow is: type the number → pick a day (Today / Tomorrow /
-   the platform's own picker, the scrolling wheel on iOS) → choose which
+   shopping. The flow is: type the number → **Find my flight** → pick a date
+   in the platform's own picker (the scrolling wheel on iOS) → choose which
    departure you were on → answer the return question → confirm. The return's
-   picker cannot go earlier than the outbound.
+   picker cannot open earlier than the outbound date.
+
+   The date step waits for the button rather than appearing as you type: a
+   heading that rewrites itself on every keystroke, asking about half a flight
+   number, reads as a bug. There are no Today/Tomorrow shortcuts either —
+   trips are planned weeks out, so those are the two dates nobody picks.
 2. **"Haven't booked yet?"** — the search flow, with the consequence sheet.
 3. **"Not flying?"** — a date range, no flight. No envelope is derived, so no
    day is marked short: a 09:00 train does not cost you a morning the way a
