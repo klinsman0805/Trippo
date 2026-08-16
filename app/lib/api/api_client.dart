@@ -102,8 +102,23 @@ class ApiClient {
       );
     }
 
-    // 204 No Content has no body to decode.
-    if (response.statusCode == 204 || response.body.isEmpty) return const {};
+    // Status is judged before the body, because a failure with an empty body
+    // is common — gateway 502s, proxy 413s, an auth layer rejecting before it
+    // reaches us. Returning `{}` for those would report failure as success and
+    // leave the caller to crash on a field that was never going to be there.
+    final failed = response.statusCode >= 400;
+
+    // 204 No Content has no body to decode; nor does a bare error status.
+    if (response.body.isEmpty) {
+      if (failed) {
+        throw ApiException(
+          statusCode: response.statusCode,
+          code: 'http_${response.statusCode}',
+          message: 'The server returned ${response.statusCode} with no details.',
+        );
+      }
+      return const {};
+    }
 
     final Map<String, dynamic> decoded;
     try {
@@ -111,12 +126,14 @@ class ApiClient {
     } catch (_) {
       throw ApiException(
         statusCode: response.statusCode,
-        code: 'invalid_response',
-        message: 'Server returned a non-JSON response.',
+        code: failed ? 'http_${response.statusCode}' : 'invalid_response',
+        message: failed
+            ? 'The server returned ${response.statusCode}.'
+            : 'Server returned a non-JSON response.',
       );
     }
 
-    if (response.statusCode >= 400) {
+    if (failed) {
       final error = decoded['error'] as Map<String, dynamic>?;
       throw ApiException(
         statusCode: response.statusCode,

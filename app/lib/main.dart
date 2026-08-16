@@ -39,6 +39,17 @@ class TrippoApp extends StatelessWidget {
       title: 'Wayfare',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(platform),
+      // Above the Navigator, so routes, dialogs and sheets all inherit it.
+      //
+      // Providing the theme inside a screen instead looks like it works until
+      // something opens in the root overlay — showDialog and
+      // showModalBottomSheet build against the Navigator's context, which is
+      // an *ancestor* of the screen that called them, so any widget in there
+      // asserting on WayfareTheme.of would fail.
+      builder: (context, child) => WayfareTheme(
+        platform: platform,
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: directTripId.isNotEmpty && directScreen == 'flights'
           ? _FlightsPreview(api: api, tripId: directTripId, platform: platform)
           : directTripId.isNotEmpty

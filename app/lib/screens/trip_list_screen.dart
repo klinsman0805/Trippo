@@ -14,7 +14,11 @@ import 'wayfare/formatting.dart';
 /// this fills a gap rather than contradicting the design — styled with the
 /// same tokens so it doesn't read as a different app.
 class TripListScreen extends StatefulWidget {
-  const TripListScreen({super.key, required this.api, required this.onOpenTrip});
+  const TripListScreen({
+    super.key,
+    required this.api,
+    required this.onOpenTrip,
+  });
 
   final TrippoApi api;
   final void Function(BuildContext context, String tripId) onOpenTrip;
@@ -80,45 +84,41 @@ class _TripListScreenState extends State<TripListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final platform = WayfareTheme.hostPlatform();
-
-    return WayfareTheme(
-      platform: platform,
-      child: Builder(
-        builder: (context) => Scaffold(
-          backgroundColor: WayfareColors.bgApp,
-          body: SafeArea(
-            bottom: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const WayfareEyebrow(
-                        'Wayfare',
-                        color: WayfareColors.accent,
-                        size: 13,
-                      ),
-                      const SizedBox(height: 2),
-                      Text('Your trips', style: WayfareType.display(32)),
-                    ],
+    // The theme comes from the app root rather than being provided here: a
+    // screen-level copy would not reach the dialogs this screen opens, and it
+    // ignored the app's platform override.
+    return Scaffold(
+      backgroundColor: WayfareColors.bgApp,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const WayfareEyebrow(
+                    'Wayfare',
+                    color: WayfareColors.accent,
+                    size: 13,
                   ),
-                ),
-                _FeatureNotice(repo: _repo),
-                Expanded(child: _body()),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-                  child: WayfarePrimaryButton(
-                    label: 'Start a new trip',
-                    onPressed: _createTrip,
-                  ),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text('Your trips', style: WayfareType.display(32)),
+                ],
+              ),
             ),
-          ),
+            _FeatureNotice(repo: _repo),
+            Expanded(child: _body()),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+              child: WayfarePrimaryButton(
+                label: 'Start a new trip',
+                onPressed: _createTrip,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -127,54 +127,55 @@ class _TripListScreenState extends State<TripListScreen> {
   Widget _body() {
     return switch (_repo.trips) {
       Idle() || Loading() => const Center(
-          child: CircularProgressIndicator(color: WayfareColors.accent),
-        ),
+        child: CircularProgressIndicator(color: WayfareColors.accent),
+      ),
       Failed(:final error) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Can\'t reach the server', style: WayfareType.display(24)),
-                const SizedBox(height: 9),
-                Text(
-                  error.message,
-                  textAlign: TextAlign.center,
-                  style: WayfareType.body(13.5, color: WayfareColors.subhead),
-                ),
-                const SizedBox(height: 18),
-                WayfarePrimaryButton(label: 'Try again', onPressed: _repo.load),
-              ],
-            ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Can\'t reach the server', style: WayfareType.display(24)),
+              const SizedBox(height: 9),
+              Text(
+                error.message,
+                textAlign: TextAlign.center,
+                style: WayfareType.body(13.5, color: WayfareColors.subhead),
+              ),
+              const SizedBox(height: 18),
+              WayfarePrimaryButton(label: 'Try again', onPressed: _repo.load),
+            ],
           ),
         ),
+      ),
       Loaded(:final value) when value.isEmpty => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('No trips yet', style: WayfareType.display(24)),
-                const SizedBox(height: 9),
-                Text(
-                  'Start one, add who\'s coming, and the planner takes it from there.',
-                  textAlign: TextAlign.center,
-                  style: WayfareType.body(13.5, color: WayfareColors.subhead),
-                ),
-              ],
-            ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('No trips yet', style: WayfareType.display(24)),
+              const SizedBox(height: 9),
+              Text(
+                'Start one, add who\'s coming, and the planner takes it from there.',
+                textAlign: TextAlign.center,
+                style: WayfareType.body(13.5, color: WayfareColors.subhead),
+              ),
+            ],
           ),
         ),
+      ),
       Loaded(:final value) => ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          itemCount: value.length,
-          separatorBuilder: (_, _) => const SizedBox(height: WayfareSpace.cardGap),
-          itemBuilder: (context, i) => _TripTile(
-            trip: value[i],
-            onOpen: () => widget.onOpenTrip(context, value[i].id),
-            onDelete: () => _repo.delete(value[i].id),
-          ),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        itemCount: value.length,
+        separatorBuilder: (_, _) =>
+            const SizedBox(height: WayfareSpace.cardGap),
+        itemBuilder: (context, i) => _TripTile(
+          trip: value[i],
+          onOpen: () => widget.onOpenTrip(context, value[i].id),
+          onDelete: () => _repo.delete(value[i].id),
         ),
+      ),
     };
   }
 }
@@ -239,7 +240,7 @@ class _TripTile extends StatelessWidget {
                       trip.memberCount == 0
                           ? 'No travellers yet'
                           : '${trip.memberCount} '
-                              '${trip.memberCount == 1 ? 'traveller' : 'travellers'}',
+                                '${trip.memberCount == 1 ? 'traveller' : 'travellers'}',
                       style: const TextStyle(
                         fontSize: 12.5,
                         color: WayfareColors.faint,
@@ -281,7 +282,8 @@ class _FeatureNotice extends StatelessWidget {
     final theme = WayfareTheme.of(context);
     final warnings = <String>[
       if (!repo.plannerAvailable) 'Planning is off — no ANTHROPIC_API_KEY set',
-      if (!repo.mapsAvailable) 'Maps and transit are off — no GOOGLE_MAPS_API_KEY set',
+      if (!repo.mapsAvailable)
+        'Maps and transit are off — no GOOGLE_MAPS_API_KEY set',
       if (repo.flightsAreEstimatesOnly) 'Flight prices are mock estimates',
     ];
     if (warnings.isEmpty) return const SizedBox.shrink();
