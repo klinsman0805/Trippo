@@ -5,6 +5,7 @@ import { getTrip } from '../trips/repo.js';
 import { listAcknowledged, setAcknowledged } from './conflicts.js';
 import {
   addBlock,
+  createBlankPlan,
   moveBlock,
   pinnedSummary,
   removeBlock,
@@ -155,6 +156,19 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
   // revision means "the planner ran", and the Refine thread is derived from
   // revisions — a new one per typed activity would fill the conversation with
   // bubbles nobody said.
+
+  /**
+   * Start an itinerary with days but nothing in them.
+   *
+   * "Build it by hand" needs somewhere to build. Idempotent: called on a trip
+   * that already has a plan, it returns that plan rather than wiping it.
+   */
+  app.post<{ Params: { id: string } }>('/trips/:id/plan/blank', async (req, reply) => {
+    getTrip(req.params.id);
+    const record = createBlankPlan(req.params.id);
+    reply.code(201);
+    return { plan: record.plan };
+  });
 
   const SlotSchema = z.enum(['morning', 'afternoon', 'evening', 'anytime']);
 

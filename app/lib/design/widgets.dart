@@ -78,6 +78,18 @@ class WayfarePill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       );
 
+  /// Written by hand rather than planned.
+  ///
+  /// Sits in the card's existing pill row beside OPTIONAL — the only change a
+  /// hand-written activity makes to the card, so it stays pixel-identical to a
+  /// generated one everywhere else.
+  factory WayfarePill.yours() => const WayfarePill(
+        label: 'yours',
+        background: WayfareColors.writtenBg,
+        foreground: WayfareColors.writtenInk,
+        border: WayfareColors.writtenPinBorder,
+      );
+
   /// A traveller's pace, on the Group tab.
   factory WayfarePill.pace(String pace) => WayfarePill(
         label: pace,

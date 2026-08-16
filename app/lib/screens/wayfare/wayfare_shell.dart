@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide TimeOfDay;
 
 import '../../api/trippo_api.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
 import '../../design/widgets.dart';
+import '../../models/plan.dart';
 import '../../models/trip.dart';
 import '../../state/wayfare_controller.dart';
 import 'budget_tab.dart';
@@ -11,6 +12,9 @@ import 'flights/booked_flight_screen.dart';
 import 'flights/flights_screen.dart';
 import 'formatting.dart';
 import 'group_tab.dart';
+import 'itinerary/activity_sheet.dart';
+import 'itinerary/activity_sheets.dart';
+import 'itinerary/regenerate_sheet.dart';
 import 'needs_info.dart';
 import 'plan_failed.dart';
 import 'refine_tab.dart';
@@ -169,6 +173,22 @@ class _WayfareShellState extends State<WayfareShell> {
       );
     }
 
+    // Dates exist, nothing planned: two equal ways forward rather than one
+    // path plus an apology.
+    if (_controller.tab == WayfareTab.itinerary &&
+        !_controller.hasPlan &&
+        _controller.trip?.startDate != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+        child: ItineraryStartOptions(
+          dayCount: _plannedDayCount(),
+          canGenerate: _controller.canGenerate,
+          onGenerate: _controller.generate,
+          onWriteFirst: _startFromScratch,
+        ),
+      );
+    }
+
     // Trip and Budget need a plan; Group and Refine work without one.
     if (_controller.isBlank) {
       return _BlankState(
@@ -189,7 +209,13 @@ class _WayfareShellState extends State<WayfareShell> {
     }
 
     return switch (_controller.tab) {
-      WayfareTab.itinerary => TripTab(controller: _controller),
+      WayfareTab.itinerary => TripTab(
+          controller: _controller,
+          onAddActivity: _openAddActivity,
+          onEditActivity: _openEditActivity,
+          onMoveActivity: _openMoveActivity,
+          onChangeDayCount: _openDayCount,
+        ),
       WayfareTab.budget => BudgetTab(controller: _controller),
       WayfareTab.group => GroupTab(controller: _controller),
       WayfareTab.chat => RefineTab(controller: _controller),
@@ -271,6 +297,165 @@ class _WayfareShellState extends State<WayfareShell> {
     return DateTimeRange(start: start, end: end);
   }
 
+  /// Days between the trip's dates — what "fill the 4 days" counts.
+  int _plannedDayCount() {
+    final envelope = _controller.dateEnvelope;
+    if (envelope != null) return envelope.planningDays;
+    final start = DateTime.tryParse(_controller.trip?.startDate ?? '');
+    final end = DateTime.tryParse(_controller.trip?.endDate ?? '');
+    if (start == null || end == null) return 0;
+    return end.difference(start).inDays + 1;
+  }
+
+  Future<void> _sheet2(Widget child) => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => WayfareTheme(
+          platform: widget.platformOverride ?? WayfareTheme.hostPlatform(),
+          child: child,
+        ),
+      );
+
+  /// "Build it by hand" from the empty state — there is no plan yet, so one is
+  /// created around the trip's dates before the first activity can land.
+  Future<void> _startFromScratch() async {
+    await _controller.startBlankItinerary();
+    if (!mounted) return;
+    _controller.startEditingDay(_controller.selectedDay);
+    await _openAddActivity(TimeOfDay.morning);
+  }
+
+  Future<void> _openAddActivity(TimeOfDay slot) async {
+    final day = _controller.selectedDay;
+    await _sheet2(
+      ActivitySheet(
+        day: day,
+        initialSlot: slot,
+        onCancel: () => Navigator.of(context).pop(),
+        onSave: (activity) {
+          Navigator.of(context).pop();
+          _controller.addActivity(day, activity);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openEditActivity(PlanBlock block) async {
+    final day = _controller.selectedDay;
+    await _sheet2(
+      ActivitySheet(
+        day: day,
+        existing: block,
+        onCancel: () => Navigator.of(context).pop(),
+        onSave: (activity) {
+          Navigator.of(context).pop();
+          _controller.updateActivity(block.id, activity);
+        },
+        onRemove: () {
+          Navigator.of(context).pop();
+          _openRemoveActivity(block);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openRemoveActivity(PlanBlock block) async {
+    final day = _controller.currentDay;
+    if (day == null) return;
+
+    await _sheet2(
+      RemoveActivitySheet(
+        block: block,
+        day: day.day.toInt(),
+        // Whether the slot goes dark matters more than the count, so it is
+        // computed rather than described vaguely.
+        slotBecomesEmpty:
+            day.blocks.where((b) => b.timeOfDay == block.timeOfDay).length == 1,
+        dayCostBefore: day.costPerPerson(),
+        currency: _controller.plan?.trip.currency ??
+            _controller.trip?.currency ??
+            'USD',
+        onKeep: () => Navigator.of(context).pop(),
+        onRemove: () {
+          Navigator.of(context).pop();
+          _controller.removeActivity(block.id);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openMoveActivity(PlanBlock block) async {
+    final from = _controller.selectedDay;
+    await _sheet2(
+      MoveActivitySheet(
+        block: block,
+        fromDay: from,
+        days: [
+          for (final d in _controller.plan?.itinerary ?? const [])
+            (day: d.day.toInt(), date: d.date, blockCount: d.blocks.length),
+        ],
+        onCancel: () => Navigator.of(context).pop(),
+        onMove: (day, slot) {
+          Navigator.of(context).pop();
+          _controller.moveActivity(block.id, day: day, slot: slot);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openDayCount() async {
+    await _sheet2(
+      DayCountSheet(
+        envelope: _controller.dateEnvelope,
+        dayCount: _controller.plan?.itinerary.length ?? 0,
+        onKeep: () => Navigator.of(context).pop(),
+        onChangeFlights: () {
+          Navigator.of(context).pop();
+          _openFlights();
+        },
+      ),
+    );
+  }
+
+  /// `↻` once hand-written work exists.
+  ///
+  /// Regenerating never fires straight from a tap when there is something to
+  /// lose — the sheet states what survives first.
+  Future<void> _openRegenerate() async {
+    final summary = await _controller.loadPinnedSummary();
+    if (!mounted || summary == null) {
+      await _controller.generate();
+      return;
+    }
+    if (!summary.hasPinned) {
+      await _controller.generate();
+      return;
+    }
+
+    await _sheet2(
+      RegenerateSheet(
+        summary: summary,
+        currency: _controller.plan?.trip.currency ??
+            _controller.trip?.currency ??
+            'USD',
+        onCancel: () => Navigator.of(context).pop(),
+        onUnpin: (blockId) {
+          Navigator.of(context).pop();
+          _controller.setPinned(blockId, false);
+        },
+        onKeepMine: () {
+          Navigator.of(context).pop();
+          _controller.generate();
+        },
+        onReplaceEverything: () {
+          Navigator.of(context).pop();
+          _controller.replanEverything();
+        },
+      ),
+    );
+  }
+
   /// The header `⋯` sheet on non-Group tabs.
   void _openTripOptions() {
     showModalBottomSheet<void>(
@@ -338,7 +523,7 @@ class _WayfareShellState extends State<WayfareShell> {
                     : null,
                 onTap: () {
                   Navigator.of(sheetContext).pop();
-                  _controller.generate();
+                  _openRegenerate();
                 },
               ),
             ListTile(
@@ -771,6 +956,100 @@ class _BlankState extends StatelessWidget {
               foreground: WayfareColors.muted,
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Dates exist, nothing is planned: two equal ways forward.
+///
+/// Same geometry, same size, same place in the reading order. The only
+/// hierarchy is fill versus outline — writing it yourself is not a fallback
+/// for people the planner failed, it is a way of working.
+class ItineraryStartOptions extends StatelessWidget {
+  const ItineraryStartOptions({
+    super.key,
+    required this.dayCount,
+    required this.canGenerate,
+    required this.onGenerate,
+    required this.onWriteFirst,
+  });
+
+  final int dayCount;
+  final bool canGenerate;
+  final VoidCallback onGenerate;
+  final VoidCallback onWriteFirst;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _card(
+          context,
+          eyebrow: 'Have it planned',
+          eyebrowColor: WayfareColors.accent,
+          title: dayCount > 0
+              ? 'Let the planner fill the $dayCount days'
+              : 'Let the planner fill your days',
+          cta: 'Generate the itinerary',
+          filled: true,
+          onTap: canGenerate ? onGenerate : null,
+        ),
+        const SizedBox(height: WayfareSpace.cardGap),
+        _card(
+          context,
+          eyebrow: 'Write it yourself',
+          eyebrowColor: WayfareColors.writtenInk,
+          title: 'Build it by hand',
+          cta: 'Add the first activity',
+          filled: false,
+          onTap: onWriteFirst,
+        ),
+      ],
+    );
+  }
+
+  Widget _card(
+    BuildContext context, {
+    required String eyebrow,
+    required Color eyebrowColor,
+    required String title,
+    required String cta,
+    required bool filled,
+    required VoidCallback? onTap,
+  }) {
+    final theme = WayfareTheme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: WayfareColors.surface,
+        borderRadius: theme.cardLg,
+        border: Border.all(color: WayfareColors.borderSoft, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: WayfareEyebrow(eyebrow, color: eyebrowColor, size: 10.5),
+          ),
+          const SizedBox(height: 8),
+          Text(title, style: WayfareType.ui(16, weight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          if (filled)
+            WayfarePrimaryButton(label: cta, onPressed: onTap)
+          else
+            WayfareSecondaryButton(
+              label: cta,
+              onPressed: onTap,
+              // Outline in full ink rather than the muted border, so the two
+              // cards read as siblings rather than primary and afterthought.
+              foreground: WayfareColors.ink,
+              weight: FontWeight.w600,
+            ),
         ],
       ),
     );

@@ -402,6 +402,76 @@ class Plan {
       );
 }
 
+/// One activity the planner has been told to leave alone.
+class PinnedActivity {
+  const PinnedActivity({
+    required this.id,
+    required this.day,
+    required this.activity,
+    required this.timeOfDay,
+    this.costPerPerson,
+  });
+
+  final String id;
+  final int day;
+  final String activity;
+  final TimeOfDay timeOfDay;
+  final num? costPerPerson;
+
+  factory PinnedActivity.fromJson(Map<String, dynamic> json) => PinnedActivity(
+        id: json['id'] as String? ?? '',
+        day: (json['day'] as num?)?.toInt() ?? 0,
+        activity: json['activity'] as String? ?? '',
+        timeOfDay: timeOfDayFrom(json['time_of_day'] as String?),
+        costPerPerson: json['estimated_cost_per_person'] as num?,
+      );
+}
+
+/// What regenerating would keep and what it would replace.
+///
+/// Read from the server rather than derived locally: the regenerate sheet
+/// states this as fact before the user commits, so it has to match what the
+/// planner will actually do.
+class PinnedSummary {
+  const PinnedSummary({
+    required this.pinned,
+    required this.replanDays,
+    required this.committedCost,
+    required this.honoursPinned,
+  });
+
+  final List<PinnedActivity> pinned;
+
+  /// Days with nothing pinned on them — replanned wholesale.
+  final List<int> replanDays;
+
+  /// Per-person cost already committed to pinned activities.
+  final num committedCost;
+
+  /// False would mean the backend cannot keep hand-written work through a
+  /// regeneration, in which case the sheet must not offer to.
+  final bool honoursPinned;
+
+  bool get hasPinned => pinned.isNotEmpty;
+
+  /// Days that keep at least one hand-written activity.
+  List<int> get keptDays {
+    final days = pinned.map((p) => p.day).toSet().toList()..sort();
+    return days;
+  }
+
+  factory PinnedSummary.fromJson(Map<String, dynamic> json) => PinnedSummary(
+        pinned: (json['pinned'] as List? ?? const [])
+            .map((p) => PinnedActivity.fromJson(p as Map<String, dynamic>))
+            .toList(),
+        replanDays: (json['replan_days'] as List? ?? const [])
+            .map((d) => (d as num).toInt())
+            .toList(),
+        committedCost: json['committed_cost'] as num? ?? 0,
+        honoursPinned: json['honours_pinned'] as bool? ?? false,
+      );
+}
+
 /// A stored plan revision. Refinements produce a new revision rather than
 /// mutating the last one, so the group can compare or roll back.
 class PlanRevision {

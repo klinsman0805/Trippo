@@ -1,6 +1,7 @@
-import { db, newId } from '../../db/index.js';
+import { db, newId, nowIso } from '../../db/index.js';
 import { badRequest, notFound } from '../../lib/errors.js';
 import type { Plan, PlanBlock } from '../../schemas/plan.js';
+import { getTrip } from '../trips/repo.js';
 import { getLatestPlan, type PlanRecord } from './service.js';
 
 /**
@@ -39,6 +40,82 @@ export function ensureBlockIds(plan: Plan): boolean {
     }
   }
   return changed;
+}
+
+/**
+ * An itinerary with days but nothing in them.
+ *
+ * "Build it by hand" has to have somewhere to build. The days come from the
+ * trip's own dates, so a hand-written plan has exactly the shape a generated
+ * one would — the flight envelope stays the only thing that decides how long a
+ * trip is, whoever fills it in.
+ */
+export function createBlankPlan(tripId: string): PlanRecord {
+  const existing = getLatestPlan(tripId);
+  if (existing) return existing;
+
+  const trip = getTrip(tripId);
+  const days = daysBetween(trip.start_date, trip.end_date);
+
+  const plan: Plan = {
+    conversational_summary: '',
+    status: 'complete',
+    missing_info: [],
+    trip: {
+      title: trip.title,
+      destinations: trip.destinations,
+      start_date: trip.start_date,
+      end_date: trip.end_date,
+      duration_days: days.length,
+      currency: trip.currency,
+      total_budget: trip.total_budget,
+      budget_breakdown: {
+        lodging: { planned: 0, estimated: 0 },
+        transport: { planned: 0, estimated: 0 },
+        food: { planned: 0, estimated: 0 },
+        activities: { planned: 0, estimated: 0 },
+        buffer: { planned: 0, estimated: 0 },
+      },
+      estimated_total_cost: 0,
+      over_budget: false,
+      assumptions: [],
+    },
+    members: [],
+    conflicts: [],
+    itinerary: days.map((date, i) => ({
+      day: i + 1,
+      date,
+      location: trip.destinations[0] ?? '',
+      lodging_area_suggestion: null,
+      blocks: [],
+      notes: null,
+    })),
+    packing_and_prep_notes: [],
+    verify_before_booking: [],
+    clarifying_questions: [],
+  };
+
+  const id = newId('plan');
+  db.prepare(
+    `INSERT INTO plans (id, trip_id, revision, status, summary, plan, model, user_request, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, tripId, 1, 'complete', '', JSON.stringify(plan), 'hand-written', null, nowIso());
+
+  return getLatestPlan(tripId)!;
+}
+
+/** Inclusive list of ISO dates, or a single unnamed day when there are none. */
+function daysBetween(start: string | null, end: string | null): (string | null)[] {
+  if (!start || !end) return [null];
+  const from = Date.parse(`${start}T00:00:00Z`);
+  const to = Date.parse(`${end}T00:00:00Z`);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return [start];
+
+  const out: string[] = [];
+  for (let t = from; t <= to; t += 86_400_000) {
+    out.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return out;
 }
 
 function loadPlan(tripId: string): PlanRecord {

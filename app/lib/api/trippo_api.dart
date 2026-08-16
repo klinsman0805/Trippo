@@ -390,6 +390,79 @@ class TrippoApi {
     return PlanRevision.fromJson(json['plan'] as Map<String, dynamic>);
   }
 
+  // --- editing the itinerary by hand ---
+  //
+  // Each of these returns the whole updated plan, so the client replaces its
+  // state wholesale rather than trying to mirror the server's edit locally.
+
+  /// Start an itinerary with days but nothing in them.
+  ///
+  /// Idempotent — on a trip that already has a plan this returns that plan
+  /// rather than wiping it, so a stray tap cannot destroy an itinerary.
+  Future<Plan> startBlankItinerary(String tripId) async {
+    final json = await _client.post('/trips/$tripId/plan/blank');
+    return Plan.fromJson(json['plan'] as Map<String, dynamic>);
+  }
+
+  Future<Plan> addActivity(
+    String tripId,
+    int day,
+    Map<String, dynamic> activity,
+  ) async {
+    final json = await _client.post(
+      '/trips/$tripId/plan/days/$day/blocks',
+      body: activity,
+    );
+    return Plan.fromJson(json['plan'] as Map<String, dynamic>);
+  }
+
+  Future<Plan> updateActivity(
+    String tripId,
+    String blockId,
+    Map<String, dynamic> activity,
+  ) async {
+    final json = await _client.patch(
+      '/trips/$tripId/plan/blocks/$blockId',
+      body: activity,
+    );
+    return Plan.fromJson(json['plan'] as Map<String, dynamic>);
+  }
+
+  Future<Plan> removeActivity(String tripId, String blockId) async {
+    final json = await _client.deleteReturning(
+      '/trips/$tripId/plan/blocks/$blockId',
+    );
+    return Plan.fromJson(json['plan'] as Map<String, dynamic>);
+  }
+
+  Future<Plan> moveActivity(
+    String tripId,
+    String blockId, {
+    required int day,
+    required String timeOfDay,
+  }) async {
+    final json = await _client.post(
+      '/trips/$tripId/plan/blocks/$blockId/move',
+      body: {'day': day, 'time_of_day': timeOfDay},
+    );
+    return Plan.fromJson(json['plan'] as Map<String, dynamic>);
+  }
+
+  /// Hand one activity back to the planner without deleting it.
+  Future<Plan> setPinned(String tripId, String blockId, bool pinned) async {
+    final json = await _client.post(
+      '/trips/$tripId/plan/blocks/$blockId/pin',
+      body: {'pinned': pinned},
+    );
+    return Plan.fromJson(json['plan'] as Map<String, dynamic>);
+  }
+
+  /// What regenerating would keep and what it would replace.
+  Future<PinnedSummary> pinnedSummary(String tripId) async {
+    final json = await _client.get('/trips/$tripId/plan/pinned');
+    return PinnedSummary.fromJson(json);
+  }
+
   /// The Refine tab's conversation so far.
   Future<List<ChatMessage>> chatThread(String tripId) async {
     final json = await _client.get('/trips/$tripId/chat');

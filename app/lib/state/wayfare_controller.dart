@@ -59,6 +59,18 @@ class WayfareController extends ChangeNotifier {
   /// The traveller whose edit sheet is open, if any.
   String? editingMemberId;
 
+  /// Which day is in edit mode, or null for reading.
+  ///
+  /// Per-day rather than global, per the design: reading a plan must stay
+  /// risk-free, and an always-live card makes every scroll a near-miss.
+  int? dayEditing;
+
+  /// The one-line composer's text while in edit mode.
+  String quickEntry = '';
+
+  /// Set while an edit is in flight, so a double-tap cannot fire twice.
+  bool savingActivity = false;
+
   /// Set after an edit that changes what the planner reconciled. The conflicts
   /// on screen were computed against the old preferences, so they are shown as
   /// out of date rather than quietly left looking current.
@@ -281,6 +293,156 @@ class WayfareController extends ChangeNotifier {
       '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
+
+  // --- editing the itinerary by hand ---
+
+  bool get isEditingDay => dayEditing != null && dayEditing == selectedDay;
+
+  void startEditingDay(int day) {
+    dayEditing = day;
+    quickEntry = '';
+    notifyListeners();
+  }
+
+  void stopEditingDay() {
+    dayEditing = null;
+    quickEntry = '';
+    notifyListeners();
+  }
+
+  void setQuickEntry(String value) {
+    quickEntry = value;
+    notifyListeners();
+  }
+
+  /// The fastest path: a title, and nothing else.
+  ///
+  /// Lands in the slot the user is looking at, which is what the composer's
+  /// note promises. A one-line activity is a complete activity — everything
+  /// else can be filled in later by tapping it.
+  Future<void> addQuickActivity(TimeOfDay slot) async {
+    final title = quickEntry.trim();
+    if (title.isEmpty || savingActivity) return;
+
+    await _editPlan(() => _api.addActivity(tripId, selectedDay, {
+          'activity': title,
+          'time_of_day': timeOfDayTo(slot),
+        }));
+    quickEntry = '';
+    notifyListeners();
+  }
+
+  /// "Build it by hand" — days with nothing in them, ready to fill.
+  Future<void> startBlankItinerary() async {
+    try {
+      plan = await _api.startBlankItinerary(tripId);
+      selectedDay = plan!.itinerary.isEmpty ? 1 : plan!.itinerary.first.day.toInt();
+      error = null;
+    } on ApiException catch (e) {
+      error = e.message;
+    }
+    notifyListeners();
+  }
+
+  /// What regenerating would keep. Null when the plan cannot be read.
+  Future<PinnedSummary?> loadPinnedSummary() async {
+    try {
+      return await _api.pinnedSummary(tripId);
+    } on ApiException {
+      return null;
+    }
+  }
+
+  /// The one-way path: unpin everything, then replan.
+  ///
+  /// Unpinning first is what makes it real — the planner honours pins, so
+  /// leaving them in place would quietly keep the work this button says it
+  /// replaces.
+  Future<void> replanEverything() async {
+    final summary = await loadPinnedSummary();
+    for (final pinned in summary?.pinned ?? const <PinnedActivity>[]) {
+      try {
+        plan = await _api.setPinned(tripId, pinned.id, false);
+      } on ApiException catch (e) {
+        error = e.message;
+        notifyListeners();
+        return;
+      }
+    }
+    await generate();
+  }
+
+  Future<void> addActivity(int day, Map<String, dynamic> activity) =>
+      _editPlan(() => _api.addActivity(tripId, day, activity));
+
+  Future<void> updateActivity(String blockId, Map<String, dynamic> activity) =>
+      _editPlan(() => _api.updateActivity(tripId, blockId, activity));
+
+  Future<void> removeActivity(String blockId) =>
+      _editPlan(() => _api.removeActivity(tripId, blockId));
+
+  Future<void> moveActivity(
+    String blockId, {
+    required int day,
+    required TimeOfDay slot,
+  }) async {
+    await _editPlan(() => _api.moveActivity(
+          tripId,
+          blockId,
+          day: day,
+          timeOfDay: timeOfDayTo(slot),
+        ));
+    // Follow the activity, so the move is visible rather than taken on trust.
+    selectedDay = day;
+    dayEditing = day;
+    notifyListeners();
+  }
+
+  Future<void> setPinned(String blockId, bool pinned) =>
+      _editPlan(() => _api.setPinned(tripId, blockId, pinned));
+
+  /// One hand-edit. Every one returns the whole plan, so state is replaced
+  /// wholesale rather than patched locally — there is no second copy to drift.
+  Future<void> _editPlan(Future<Plan> Function() edit) async {
+    if (savingActivity) return;
+    savingActivity = true;
+    notifyListeners();
+
+    try {
+      plan = await edit();
+      _clampSelectedDay();
+      error = null;
+    } on ApiException catch (e) {
+      error = e.message;
+    }
+
+    savingActivity = false;
+    notifyListeners();
+  }
+
+  /// Blocks on the current day, in the slot given.
+  List<PlanBlock> blocksIn(TimeOfDay slot) =>
+      (currentDay?.blocks ?? const []).where((b) => b.timeOfDay == slot).toList();
+
+  /// Named slots with nothing in them. `anytime` is deliberately excluded —
+  /// it is not a part of the day, so it cannot be "open".
+  List<TimeOfDay> get openSlots => [
+        for (final slot in const [
+          TimeOfDay.morning,
+          TimeOfDay.afternoon,
+          TimeOfDay.evening,
+        ])
+          if (blocksIn(slot).isEmpty) slot,
+      ];
+
+  /// `2 of 3 slots filled` — counts only the three the flight envelope acts on.
+  int slotsFilledOn(PlanDay day) => const [
+        TimeOfDay.morning,
+        TimeOfDay.afternoon,
+        TimeOfDay.evening,
+      ].where((s) => day.blocks.any((b) => b.timeOfDay == s)).length;
+
+  bool dayIsEmpty(PlanDay day) => day.blocks.isEmpty;
 
   // --- planning ---
 

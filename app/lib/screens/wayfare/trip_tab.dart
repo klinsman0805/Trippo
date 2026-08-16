@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide TimeOfDay;
 
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
@@ -8,12 +8,26 @@ import '../../models/flight.dart';
 import '../../models/trip.dart';
 import '../../state/wayfare_controller.dart';
 import 'formatting.dart';
+import 'itinerary/day_editing.dart';
 
 /// Trip tab: one day at a time behind a horizontal day-chip scroller.
 class TripTab extends StatelessWidget {
-  const TripTab({super.key, required this.controller});
+  const TripTab({
+    super.key,
+    required this.controller,
+    required this.onAddActivity,
+    required this.onEditActivity,
+    required this.onMoveActivity,
+    required this.onChangeDayCount,
+  });
 
   final WayfareController controller;
+
+  /// Opens the add sheet for one slot on the selected day.
+  final void Function(TimeOfDay slot) onAddActivity;
+  final ValueChanged<PlanBlock> onEditActivity;
+  final ValueChanged<PlanBlock> onMoveActivity;
+  final VoidCallback onChangeDayCount;
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +61,11 @@ class TripTab extends StatelessWidget {
               key: ValueKey(controller.selectedDay),
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (controller.isEditingDay)
+                  DayEditingBar(
+                    day: day.day.toInt(),
+                    onDone: controller.stopEditingDay,
+                  ),
                 if (controller.updatedDay == day.day) _updatedNotice(theme),
                 if (controller.dateEnvelope?.shortDayFor(day.day) case final short?)
                   ShortDayBand(
@@ -56,28 +75,123 @@ class TripTab extends StatelessWidget {
                   ),
                 _dayMeta(day, currency),
                 const SizedBox(height: 10),
-                for (final block in controller.visibleBlocks) ...[
-                  ActivityCard(
-                    block: block,
-                    members: controller.members,
-                    currency: currency,
-                  ),
-                  const SizedBox(height: WayfareSpace.cardGap),
-                ],
+                if (controller.dayIsEmpty(day))
+                  EmptyDayCard(
+                    day: day.day.toInt(),
+                    otherPlannedDays: controller.plan!.itinerary
+                        .where((d) => d.day != day.day && d.blocks.isNotEmpty)
+                        .length,
+                    onAddFirst: () => onAddActivity(TimeOfDay.morning),
+                    onAskPlanner: controller.canGenerate
+                        ? () => controller.send(
+                              'Fill in day ${day.day} — the rest of the trip '
+                              'is planned, that day is empty.',
+                            )
+                        : null,
+                  )
+                else
+                  for (final block in controller.visibleBlocks) ...[
+                    _activityRow(block, currency),
+                    const SizedBox(height: WayfareSpace.cardGap),
+                  ],
                 // A short day says why it is short rather than being padded.
                 if (controller.dateEnvelope?.shortDayFor(day.day) case final short?)
                   _EmptySlotRow(short: short),
+                if (!controller.dayIsEmpty(day)) ...[
+                  if (controller.isEditingDay) ...[
+                    for (final slot in controller.openSlots) ...[
+                      AddSlotRow(
+                        slot: slot,
+                        onAdd: () => onAddActivity(slot),
+                      ),
+                      const SizedBox(height: WayfareSpace.cardGap),
+                    ],
+                  ] else
+                    OpenSlotLine(
+                      slots: controller.openSlots,
+                      onTap: () =>
+                          controller.startEditingDay(day.day.toInt()),
+                    ),
+                ],
                 const SizedBox(height: 2),
-                WayfareSecondaryButton(
-                  label: controller.showOptional
-                      ? 'Hide optional activities'
-                      : 'Show optional activities',
-                  onPressed: controller.toggleOptional,
-                  fontSize: 13.5,
-                  foreground: WayfareColors.inkSecondary,
-                  background: WayfareColors.surface.withValues(alpha: 0.7),
-                ),
+                if (controller.isEditingDay) ...[
+                  WayfarePrimaryButton(
+                    label: 'Add an activity',
+                    onPressed: () => onAddActivity(TimeOfDay.anytime),
+                  ),
+                  const SizedBox(height: 10),
+                  WayfareSecondaryButton(
+                    label: 'Add or remove a day',
+                    onPressed: onChangeDayCount,
+                    fontSize: 13.5,
+                    foreground: WayfareColors.muted,
+                  ),
+                  const SizedBox(height: 10),
+                ] else ...[
+                  if (day.blocks.any((b) => b.optional)) ...[
+                    // Only offered when there is something optional to hide;
+                    // otherwise it is a control that does nothing.
+                    WayfareSecondaryButton(
+                      label: controller.showOptional
+                          ? 'Hide optional activities'
+                          : 'Show optional activities',
+                      onPressed: controller.toggleOptional,
+                      fontSize: 13.5,
+                      foreground: WayfareColors.inkSecondary,
+                      background: WayfareColors.surface.withValues(alpha: 0.7),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  WayfareSecondaryButton(
+                    label: 'Edit this day',
+                    onPressed: () => controller.startEditingDay(day.day.toInt()),
+                    fontSize: 13.5,
+                    foreground: WayfareColors.inkSecondary,
+                    background: WayfareColors.surface.withValues(alpha: 0.7),
+                  ),
+                  const SizedBox(height: 10),
+                ],
               ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One activity, plus the edit-mode furniture around it.
+  ///
+  /// The card itself is untouched in either mode — a hand-written activity and
+  /// a generated one stay pixel-identical, and reading never changes shape.
+  Widget _activityRow(PlanBlock block, String currency) {
+    final card = ActivityCard(
+      block: block,
+      members: controller.members,
+      currency: currency,
+    );
+
+    if (!controller.isEditingDay) return card;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const ReorderGrip(),
+        Expanded(
+          child: GestureDetector(
+            onTap: () => onEditActivity(block),
+            child: card,
+          ),
+        ),
+        SizedBox(
+          width: WayfareTouch.ios,
+          height: WayfareTouch.ios,
+          child: IconButton(
+            onPressed: () => onMoveActivity(block),
+            tooltip: 'Move to another day',
+            icon: const Icon(
+              Icons.swap_vert,
+              size: 20,
+              color: WayfareColors.inkSecondary,
             ),
           ),
         ),
@@ -102,6 +216,9 @@ class TripTab extends StatelessWidget {
               // Marks a day the flights cut short, so it reads as deliberate
               // rather than as a day the planner forgot to fill.
               isShort: controller.dateEnvelope?.shortDayFor(day.day) != null,
+              // Deliberately not the amber dot: a shortened day is a
+              // constraint, an unfilled one is a to-do.
+              isUnfilled: controller.dayIsEmpty(day),
               onTap: () => controller.selectDay(day.day.toInt()),
             ),
             const SizedBox(width: 8),
@@ -133,6 +250,11 @@ class TripTab extends StatelessWidget {
 
   Widget _dayMeta(PlanDay day, String currency) {
     final cost = day.costPerPerson(includeOptional: controller.showOptional);
+    // An empty day has no cost worth stating, so the figure says how much of
+    // it is written instead.
+    final right = controller.dayIsEmpty(day)
+        ? '${controller.slotsFilledOn(day)} of 3 slots filled'
+        : '${formatMoney(cost, currency)} pp planned';
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -145,7 +267,7 @@ class TripTab extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Text(
-          '${formatMoney(cost, currency)} pp planned',
+          right,
           style: const TextStyle(fontSize: 12.5, color: WayfareColors.mutedLight),
         ),
       ],
@@ -161,6 +283,7 @@ class _DayChip extends StatelessWidget {
     required this.radius,
     required this.onTap,
     this.isShort = false,
+    this.isUnfilled = false,
   });
 
   final String label;
@@ -168,6 +291,7 @@ class _DayChip extends StatelessWidget {
   final bool selected;
   final double radius;
   final bool isShort;
+  final bool isUnfilled;
   final VoidCallback onTap;
 
   @override
@@ -227,7 +351,7 @@ class _DayChip extends StatelessWidget {
       ),
     );
 
-    if (!isShort) return chip;
+    if (!isShort && !isUnfilled) return chip;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -239,9 +363,15 @@ class _DayChip extends StatelessWidget {
           child: Container(
             width: 6,
             height: 6,
-            decoration: const BoxDecoration(
-              color: WayfareColors.morning, // #d99a3e
+            decoration: BoxDecoration(
+              // Solid amber = shortened by a flight. Hollow terracotta ring =
+              // you have not written it yet. Two different meanings, so never
+              // the same mark.
+              color: isShort ? WayfareColors.morning : Colors.transparent,
               shape: BoxShape.circle,
+              border: isShort
+                  ? null
+                  : Border.all(color: WayfareColors.accent, width: 1.5),
             ),
           ),
         ),
@@ -264,6 +394,11 @@ class ActivityCard extends StatelessWidget {
   final PlanBlock block;
   final List<Member> members;
   final String currency;
+
+  bool get _hasFooter =>
+      members.isNotEmpty ||
+      (block.estimatedDurationMinutes ?? 0) > 0 ||
+      block.location.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -290,13 +425,20 @@ class ActivityCard extends StatelessWidget {
           _topRow(),
           const SizedBox(height: 8),
           _titleRow(),
-          const SizedBox(height: 7),
-          Text(
-            block.description,
-            style: WayfareType.body(13.5, color: WayfareColors.muted),
-          ),
-          const SizedBox(height: 11),
-          _fitRow(fit),
+          // A hand-written activity often has no description, and an empty
+          // Text still claims a line — which left a hollow gap in the middle
+          // of every card typed in a hurry.
+          if (block.description.trim().isNotEmpty) ...[
+            const SizedBox(height: 7),
+            Text(
+              block.description,
+              style: WayfareType.body(13.5, color: WayfareColors.muted),
+            ),
+          ],
+          if (_hasFooter) ...[
+            const SizedBox(height: 11),
+            _footer(fit),
+          ],
         ],
       ),
     );
@@ -325,6 +467,19 @@ class ActivityCard extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
+        // A stated time prints ahead of the slot label; without one the
+        // activity simply sits in its part of the day.
+        if (block.startTime != null) ...[
+          Text(
+            block.startTime!,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: WayfareColors.ink,
+            ),
+          ),
+          const SizedBox(width: 6),
+        ],
         Text(
           block.timeOfDay.name.toUpperCase(),
           style: WayfareType.eyebrow(11.5, color: const Color(0xFF6D6255)),
@@ -356,8 +511,33 @@ class ActivityCard extends StatelessWidget {
           ),
         ),
         if (block.optional) WayfarePill.optional(),
+        if (block.isMine) WayfarePill.yours(),
       ],
     );
+  }
+
+  /// Footer line.
+  ///
+  /// With no group to show, the avatar row has nothing to say, so the design
+  /// gives the row to `duration · venue` instead. When group planning returns
+  /// the avatars take it back.
+  Widget _footer(List<int> memberIndexes) {
+    if (members.isEmpty) {
+      final parts = [
+        if (block.estimatedDurationMinutes != null &&
+            block.estimatedDurationMinutes! > 0)
+          formatDuration(block.estimatedDurationMinutes!),
+        if (block.location.trim().isNotEmpty) block.location.trim(),
+      ];
+      // Both blank is a legitimate one-line activity, so the row goes entirely
+      // rather than leaving a gap where a fact should be.
+      if (parts.isEmpty) return const SizedBox.shrink();
+      return Text(
+        parts.join(' · '),
+        style: const TextStyle(fontSize: 12.5, color: WayfareColors.mutedLight),
+      );
+    }
+    return _fitRow(memberIndexes);
   }
 
   Widget _fitRow(List<int> memberIndexes) {

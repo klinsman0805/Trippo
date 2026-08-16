@@ -87,6 +87,11 @@ class ApiClient {
     await _send(() => _client.delete(_uri(path)), _defaultTimeout);
   }
 
+  /// DELETE where the response body matters — removing an activity returns the
+  /// updated plan, so the client does not have to refetch it.
+  Future<Map<String, dynamic>> deleteReturning(String path) =>
+      _send(() => _client.delete(_uri(path)), _defaultTimeout);
+
   Future<Map<String, dynamic>> _send(
     Future<http.Response> Function() request,
     Duration timeout,

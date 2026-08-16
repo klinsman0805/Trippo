@@ -300,6 +300,36 @@ Skyscanner can be added as a third adapter if a partnership ever lands.
 needs, and the conflicts between them — not what makes it possible. The planner
 needs a destination; everything else is an improvement.
 
+## Building an itinerary by hand
+
+Every activity carries an `id`, `source` and `pinned`. Editing mutates the
+**latest revision in place** rather than creating a new one — a revision means
+"the planner ran", and the Refine thread is derived from revisions, so one per
+typed activity would fill the conversation with bubbles nobody said.
+
+**Regenerating honours what you wrote.** Pinned activities are described to the
+planner as occupied time *and* re-inserted after the call, because a prompt is
+a request and this has to be true regardless. `GET /plan/pinned` reports
+`honours_pinned`, and the regenerate sheet only offers "replan around what I
+wrote" when it is true — a promise the planner cannot keep is worse than no
+option at all. The one-way path names its cost in its own label.
+
+**Slots stay load-bearing; times are additive.** An activity belongs to a part
+of the day (`morning` / `afternoon` / `evening` / `anytime`) and may *also*
+carry a `start_time`. The slot is what short days remove and what the planner
+reasons about; the time only displays and sorts. It never feeds the date
+envelope, which comes from flights — two sources of truth for the shape of a
+day is exactly the bug that would follow.
+
+`anytime` is user-only. The planner is instructed never to emit it, because an
+activity with no part of the day cannot be reasoned about when working out what
+a flight leaves usable.
+
+**An empty day is a to-do, not a constraint.** Neutral dashed treatment and a
+hollow terracotta chip ring, deliberately distinct from the amber short-day dot
+that means "the flight left no time". One invites an action; the other explains
+a limit.
+
 ## The three load-bearing states
 
 **`failed` — the planner stopped and produced nothing.** A page, not an overlay,

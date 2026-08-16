@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide TimeOfDay;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trippo/api/api_client.dart';
 import 'package:trippo/api/trippo_api.dart';
@@ -175,7 +175,13 @@ void main() {
         members: const [_maya, _diego, _ruth],
         plan: samplePlan(),
       );
-      await pumpTab(tester, TripTab(controller: controller));
+      await pumpTab(tester, TripTab(
+          controller: controller,
+          onAddActivity: (_) {},
+          onEditActivity: (_) {},
+          onMoveActivity: (_) {},
+          onChangeDayCount: () {},
+        ));
 
       expect(find.text('Day 1'), findsOneWidget);
       expect(find.text('Lisbon · Alfama'), findsOneWidget);
@@ -192,7 +198,13 @@ void main() {
         plan: samplePlan(),
       );
       controller.showOptional = false;
-      await pumpTab(tester, TripTab(controller: controller));
+      await pumpTab(tester, TripTab(
+          controller: controller,
+          onAddActivity: (_) {},
+          onEditActivity: (_) {},
+          onMoveActivity: (_) {},
+          onChangeDayCount: () {},
+        ));
 
       expect(find.text('Sunset drinks at Senhora do Monte'), findsNothing);
       expect(find.text('€12 pp planned'), findsOneWidget);
@@ -205,7 +217,13 @@ void main() {
         members: const [_maya, _diego, _ruth],
         plan: samplePlan(),
       );
-      await pumpTab(tester, TripTab(controller: controller));
+      await pumpTab(tester, TripTab(
+          controller: controller,
+          onAddActivity: (_) {},
+          onEditActivity: (_) {},
+          onMoveActivity: (_) {},
+          onChangeDayCount: () {},
+        ));
 
       // The morning block covers 2 of 3 travellers → names, not "Everyone".
       expect(find.text('Maya, Ruth'), findsOneWidget);
@@ -219,7 +237,13 @@ void main() {
         plan: samplePlan(),
       );
       controller.updatedDay = 1;
-      await pumpTab(tester, TripTab(controller: controller));
+      await pumpTab(tester, TripTab(
+          controller: controller,
+          onAddActivity: (_) {},
+          onEditActivity: (_) {},
+          onMoveActivity: (_) {},
+          onChangeDayCount: () {},
+        ));
 
       expect(find.text('Updated from your last chat request.'), findsOneWidget);
     });
