@@ -469,19 +469,20 @@ class _WayfareShellState extends State<WayfareShell> {
   Future<void> _confirmDeleteDay(int day) async {
     final count = _controller.currentDay?.blocks.length ?? 0;
     final remaining = (_controller.plan?.itinerary.length ?? 1) - 1;
+    // Which end moves follows from which day goes.
+    final shift = _controller.deletingMovesStart(day)
+        ? 'your trip starts a day later'
+        : 'your return moves a day earlier';
+    final loses = count == 0
+        ? 'Nothing is planned on this day.'
+        : 'The $count ${count == 1 ? 'activity' : 'activities'} on this day '
+            'go with it.';
 
     final confirmed = await confirmDestructive(
       context,
       title: 'Delete day $day?',
-      body: count == 0
-          ? 'The trip becomes $remaining days and your return moves a day '
-              'earlier. Nothing is planned on this day. The airline knows '
-              'nothing about this — your booking does not change.'
-          : 'The trip becomes $remaining days and your return moves a day '
-              'earlier, and the $count '
-              '${count == 1 ? 'activity' : 'activities'} on this day go with '
-              'it. The airline knows nothing about this — your booking does '
-              'not change.',
+      body: 'The trip becomes $remaining days and $shift. $loses The airline '
+          'knows nothing about this — your booking does not change.',
       confirmLabel: 'Delete',
       cancelLabel: 'Keep it',
     );
@@ -591,8 +592,10 @@ class _WayfareShellState extends State<WayfareShell> {
                               },
               ),
             // Acts on the day currently on screen, which is why it names it.
+            // Only offered on the ends: removing a middle day would move every
+            // later day onto a different date than the one being looked at.
             if (_controller.hasPlan &&
-                (_controller.plan?.itinerary.length ?? 0) > 1)
+                _controller.canDeleteDay(_controller.selectedDay))
               ListTile(
                 leading: const Icon(Icons.delete_outline,
                     color: WayfareColors.destructiveInk),

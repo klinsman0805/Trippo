@@ -140,14 +140,17 @@ export function addDay(tripId: string): Plan {
 }
 
 /**
- * Remove one day, and shorten the trip to match.
+ * Remove the first day or the last, and shorten the trip to match.
  *
- * Both halves are required. Dropping the day alone would leave the trip's
- * dates a day longer, and the next reconcile — triggered by any flight change
- * — would put an empty day straight back.
+ * Only the ends. A trip is a contiguous range of dates, so there is no such
+ * thing as removing a day from the middle — 27 September does not vanish from
+ * between the 26th and the 28th. Asking to "delete day 3" of five really means
+ * "make the trip four days", and which four is ambiguous. Offering it would
+ * silently shift every later day onto a different date than the one the user
+ * was looking at.
  *
- * The trip's *end* moves, never its start: a day removed from the middle
- * renumbers what follows, which is the same shape as losing the last day.
+ * Which end moves follows from which day goes: drop the first and the trip
+ * starts a day later; drop the last and the return comes a day earlier.
  */
 export function deleteDay(tripId: string, day: number): Plan {
   const record = loadPlan(tripId);
@@ -157,20 +160,37 @@ export function deleteDay(tripId: string, day: number): Plan {
   if (plan.itinerary.length <= 1) {
     throw badRequest('last_day', 'A trip needs at least one day.');
   }
+
+  const first = plan.itinerary[0]!.day;
+  const last = plan.itinerary[plan.itinerary.length - 1]!.day;
+  if (day !== first && day !== last) {
+    throw badRequest(
+      'middle_day',
+      `Only the first or last day can be removed. Day ${day} is in the middle, ` +
+        'and removing it would move every day after it onto a different date.',
+    );
+  }
   if (!plan.itinerary.some((d) => d.day === day)) {
     throw badRequest('day_not_found', `This trip has no day ${day}.`);
   }
 
+  const removingFirst = day === first;
   plan.itinerary = plan.itinerary.filter((d) => d.day !== day);
 
   const trip = getTrip(tripId);
   if (trip.start_date && trip.end_date) {
-    const end = Date.parse(`${trip.end_date}T00:00:00Z`) - 86_400_000;
-    const newEnd = new Date(end).toISOString().slice(0, 10);
-    updateTrip(tripId, { end_date: newEnd });
-    plan.trip.end_date = newEnd;
+    let { start_date: start, end_date: end } = trip;
+    if (removingFirst) {
+      start = shiftDate(start, 1);
+      updateTrip(tripId, { start_date: start });
+      plan.trip.start_date = start;
+    } else {
+      end = shiftDate(end, -1);
+      updateTrip(tripId, { end_date: end });
+      plan.trip.end_date = end;
+    }
 
-    const dates = daysBetween(trip.start_date, newEnd);
+    const dates = daysBetween(start, end);
     plan.itinerary.forEach((d, i) => {
       d.day = i + 1;
       d.date = dates[i] ?? null;
@@ -184,6 +204,11 @@ export function deleteDay(tripId: string, day: number): Plan {
   plan.trip.duration_days = plan.itinerary.length;
   return persist(record, plan);
 }
+
+const shiftDate = (iso: string, days: number): string =>
+  new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 
 /**
  * Make the itinerary's days match the trip's dates.

@@ -612,6 +612,43 @@ void main() {
   });
 
   group('Adding and removing days', () {
+    /// A trip is a contiguous range of dates, so removing a middle day does
+    /// not leave a gap — it shifts every later day onto a different date.
+    test('only the ends can be removed, and each moves its own end', () {
+      final controller = editableController();
+      controller.plan = Plan(
+        conversationalSummary: '',
+        status: PlanStatus.complete,
+        trip: TripSummary.fromJson(const {'currency': 'MYR'}),
+        itinerary: [
+          for (var day = 1; day <= 4; day++)
+            PlanDay(day: day, location: 'Bangkok', blocks: const []),
+        ],
+      );
+
+      expect(controller.canDeleteDay(1), isTrue);
+      expect(controller.canDeleteDay(4), isTrue);
+      expect(controller.canDeleteDay(2), isFalse);
+      expect(controller.canDeleteDay(3), isFalse);
+
+      // Dropping the first day starts the trip later; the last, ends it sooner.
+      expect(controller.deletingMovesStart(1), isTrue);
+      expect(controller.deletingMovesStart(4), isFalse);
+    });
+
+    test('a one-day trip cannot lose its only day', () {
+      final controller = editableController();
+      controller.plan = Plan(
+        conversationalSummary: '',
+        status: PlanStatus.complete,
+        trip: TripSummary.fromJson(const {'currency': 'MYR'}),
+        itinerary: [PlanDay(day: 1, location: 'Bangkok', blocks: const [])],
+      );
+
+      expect(controller.canDeleteDay(1), isFalse);
+    });
+
+
     testWidgets('the day buttons are gone from the day itself', (tester) async {
       final controller = editableController();
       await pump(tester, dayFor(controller));

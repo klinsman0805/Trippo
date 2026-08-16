@@ -353,6 +353,21 @@ class WayfareController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Only the first and last day can go.
+  ///
+  /// A trip is a contiguous range of dates, so removing a day from the middle
+  /// does not leave a gap — it moves every later day onto a different date
+  /// than the one being looked at.
+  bool canDeleteDay(int day) {
+    final days = plan?.itinerary ?? const [];
+    if (days.length <= 1) return false;
+    return day == days.first.day || day == days.last.day;
+  }
+
+  /// True when removing this day moves the start rather than the return.
+  bool deletingMovesStart(int day) =>
+      (plan?.itinerary ?? const []).firstOrNull?.day == day;
+
   /// Remove a day. The trip gets a day shorter, and the days after renumber.
   Future<void> deleteDay(int day) async {
     await _editPlan(() => _api.deleteDay(tripId, day));

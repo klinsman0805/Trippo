@@ -400,6 +400,14 @@ immediate drag competes with the page's own vertical scroll for the same
 gesture and loses more often than it wins, which is why dragging appeared to
 do nothing.
 
+**Only the first or last day can be removed.** A trip is a contiguous range of
+dates, so there is no such thing as deleting one from the middle — 27 September
+does not vanish from between the 26th and the 28th. "Delete day 3 of five"
+really means "make it four days", and which four is ambiguous; offering it
+would shift every later day onto a different date than the one on screen. Which
+end moves follows from which day goes: drop the first and the trip starts a day
+later, drop the last and the return comes a day earlier.
+
 **The itinerary reconciles against the trip's dates on read, not only on
 write.** Fixing it when flights change repairs it going forward, but a plan
 that fell out of step earlier stays wrong forever with no way to ask for a
