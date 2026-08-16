@@ -82,6 +82,10 @@ export async function buildApp(): Promise<FastifyInstance> {
       flights: features.flights,
       transit: features.maps,
       flight_provider: env.FLIGHT_PROVIDER,
+      // Surfaced separately because it is separately configured — and because
+      // "why am I still seeing mock data" is otherwise invisible from outside.
+      schedules: features.schedules,
+      schedule_provider: env.SCHEDULE_PROVIDER,
       flights_are_estimates: env.FLIGHT_PROVIDER === 'mock' || env.AMADEUS_BASE_URL.includes('test.api'),
     },
   }));
