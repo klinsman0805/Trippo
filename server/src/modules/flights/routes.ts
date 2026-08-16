@@ -23,11 +23,13 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Look up a flight the group has already booked.
    *
-   * Returns an offer-shaped record so the rest of the pipeline — envelope,
+   * Returns offer-shaped records so the rest of the pipeline — envelope,
    * selection, short days — is identical to a searched flight. The difference
    * is `booked: true` and zeroed prices, which the client renders as "already
    * booked" rather than as a fare. Making up a number here would put a figure
    * in the budget that nobody is going to pay.
+   *
+   * A list, because the traveller picks the departure they actually took.
    */
   app.post('/flights/by-number', async (req) => {
     const parsed = FlightLookupSchema.safeParse(req.body);
@@ -40,16 +42,12 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const provider = flightProvider();
-    const itinerary = await provider.lookupFlight(parsed.data);
+    const itineraries = await provider.lookupFlights(parsed.data);
 
-    // Not found is a normal answer, not an error: a mistyped digit is the
+    // An empty list is a normal answer, not an error: a mistyped digit is the
     // common case and the client shows it inline against the field.
-    if (!itinerary) {
-      return { found: false, offer: null };
-    }
-
-    const offer: FlightOffer = {
-      id: `booked-${parsed.data.flight_number}-${parsed.data.scheduled_date}`,
+    const offers: FlightOffer[] = itineraries.map((itinerary, i) => ({
+      id: `booked-${parsed.data.flight_number}-${parsed.data.scheduled_date}-${i}`,
       provider: provider.name,
       is_estimate: false,
       booked: true,
@@ -60,9 +58,9 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
       seats_available: null,
       itineraries: [itinerary],
       last_ticketing_date: null,
-    };
+    }));
 
-    return { found: true, offer };
+    return { found: offers.length > 0, offers };
   });
 
   app.post('/flights/search', async (req) => {

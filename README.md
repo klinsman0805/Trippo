@@ -258,9 +258,12 @@ only then commits.
 The Trip tab leads with three options while a trip has no dates, ordered by how
 much work each asks rather than by what the app would prefer you did:
 
-1. **"I have my flight booked"** — a flight number and a date. The schedule
-   fills in the rest, including the short first and last days. Someone holding
-   a booking has the answer already and should not be sent shopping.
+1. **"I have my flight booked"** — the flight number first, dates after.
+   Someone holding a booking has the answer already and should not be sent
+   shopping. The flow is: type the number → pick a day (Today / Tomorrow /
+   the platform's own picker, the scrolling wheel on iOS) → choose which
+   departure you were on → answer the return question → confirm. The return's
+   picker cannot go earlier than the outbound.
 2. **"Haven't booked yet?"** — the search flow, with the consequence sheet.
 3. **"Not flying?"** — a date range, no flight. No envelope is derived, so no
    day is marked short: a 09:00 train does not cost you a morning the way a
@@ -269,6 +272,17 @@ much work each asks rather than by what the app would prefer you did:
 A booked flight is stored with `booked: true` and no price. There is a fare, but
 they already paid it and we were not there — inventing one would put a number in
 the budget that nobody is going to pay.
+
+The lookup returns **every departure that number makes that day**, not one. A
+number can fly twice, and even when it doesn't, showing the times back is how
+the traveller confirms they picked the right date before it becomes their trip.
+
+**Times stay local to their own airport and are never converted.** AK892 leaving
+KUL at 16:55 (GMT+8) and the way home leaving at 18:45 (GMT+7) both read as the
+boarding pass does. Converting to one zone would make the screen disagree with
+the ticket, and risks an off-by-one-day error in the envelope. An arrival that
+lands the next day is marked `+1 day` rather than left to be inferred from two
+times that look like they run backwards.
 
 **On Skyscanner:** its Flights Live Prices API is partner-gated — a dedicated
 account manager and a revenue/commissions portal, not a self-serve key — and it

@@ -57,17 +57,20 @@ export class MockFlightProvider implements FlightProvider {
   }
 
   /**
-   * A deterministic schedule for any well-formed flight number.
+   * Deterministic schedules for any well-formed flight number.
    *
-   * The route is derived from the number itself, so `MH123` on a given date
-   * always returns the same thing — which is what makes the already-booked
-   * flow testable without credentials. Two carrier codes are treated as
-   * unknown on purpose (`ZZ` and `QQ`), because "we cannot find that flight"
-   * is a state the UI has to handle and an always-succeeding stub would hide.
+   * The route and times derive from the number itself, so `AK892` on a given
+   * date always returns the same thing — which is what makes the booked-flight
+   * flow testable without credentials. Roughly a third of numbers get a second
+   * daily departure, because "pick the one you booked" is the whole point of
+   * the list and a stub that always returned one would never exercise it.
+   *
+   * `ZZ` and `QQ` are treated as unknown on purpose: "we cannot find that
+   * flight" is a state the UI has to handle.
    */
-  async lookupFlight(query: FlightLookup): Promise<FlightItinerary | null> {
+  async lookupFlights(query: FlightLookup): Promise<FlightItinerary[]> {
     const carrier = query.flight_number.slice(0, 2);
-    if (carrier === 'ZZ' || carrier === 'QQ') return null;
+    if (carrier === 'ZZ' || carrier === 'QQ') return [];
 
     const seed = hash(`${query.flight_number}${query.scheduled_date}`);
     const origin = SAMPLE_AIRPORTS[seed % SAMPLE_AIRPORTS.length]!.iata;
@@ -76,10 +79,16 @@ export class MockFlightProvider implements FlightProvider {
       destination = SAMPLE_AIRPORTS[(seed + 1) % SAMPLE_AIRPORTS.length]!.iata;
     }
 
-    const departMinutes = (seed % 20) * 60 + (seed % 4) * 15;
     const legMinutes = 90 + (seed % 300);
+    // Kept inside 05:00–22:45: a stub that emits 00:00 departures makes
+    // real-world testing read as a bug when it is only synthetic data.
+    const departures = [5 * 60 + (seed % 17) * 60 + (seed % 4) * 15];
+    if (seed % 3 === 0) {
+      // A second rotation later the same day, wrapped inside the day.
+      departures.push(Math.min(departures[0]! + 7 * 60, 23 * 60 + 15));
+    }
 
-    return {
+    return departures.map((departMinutes) => ({
       direction: query.direction,
       duration_minutes: legMinutes,
       stops: 0,
@@ -95,7 +104,7 @@ export class MockFlightProvider implements FlightProvider {
           aircraft: null,
         },
       ],
-    };
+    }));
   }
 
   async searchAirports(keyword: string): Promise<AirportMatch[]> {

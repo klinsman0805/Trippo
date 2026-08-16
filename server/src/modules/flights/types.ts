@@ -35,6 +35,7 @@ export const FlightLookupSchema = z.object({
     .regex(/^[A-Za-z0-9]{2}\s?\d{1,4}$/, 'Expected a flight number like MH123')
     .transform((v) => v.replace(/\s+/g, '').toUpperCase()),
   scheduled_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** Set when looking up the way home, so the leg is labelled correctly. */
   direction: z.enum(['outbound', 'return']).default('outbound'),
 });
 
@@ -96,9 +97,13 @@ export interface FlightProvider {
   search(query: FlightSearch): Promise<FlightOffer[]>;
   searchAirports(keyword: string): Promise<AirportMatch[]>;
   /**
-   * Resolve one already-booked flight to its schedule. Null when the provider
-   * has no record of it — a wrong digit is the common case, and that has to be
+   * Every departure that flight number makes on that date.
+   *
+   * A list rather than one result: a number can operate more than once a day,
+   * and even when it doesn't, showing the times back lets the traveller
+   * confirm they picked the right date before it becomes their trip. Empty
+   * means no such flight that day — a wrong digit, usually, which has to stay
    * distinguishable from an outage.
    */
-  lookupFlight(query: FlightLookup): Promise<FlightItinerary | null>;
+  lookupFlights(query: FlightLookup): Promise<FlightItinerary[]>;
 }

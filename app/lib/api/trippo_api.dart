@@ -220,10 +220,14 @@ class TrippoApi {
 
   /// Look up a flight the group has already booked.
   ///
-  /// Returns null when the provider has no record of that number on that date
-  /// — a mistyped digit, usually. That is a normal answer the form shows
-  /// against the field, not an error, so it is not an exception.
-  Future<FlightOffer?> lookupFlight({
+  /// Every departure that number makes on that date — a number can fly more
+  /// than once a day, and showing the times back is how the traveller confirms
+  /// they picked the right one.
+  ///
+  /// An empty list means no such flight that day: a mistyped digit, usually.
+  /// That is a normal answer the form shows against the field, not an error,
+  /// so it is not an exception.
+  Future<List<FlightOffer>> lookupFlights({
     required String flightNumber,
     required String scheduledDate,
     String direction = 'outbound',
@@ -233,8 +237,9 @@ class TrippoApi {
       'scheduled_date': scheduledDate,
       'direction': direction,
     });
-    final offer = json['offer'] as Map<String, dynamic>?;
-    return offer == null ? null : FlightOffer.fromJson(offer);
+    return (json['offers'] as List? ?? const [])
+        .map((o) => FlightOffer.fromJson(o as Map<String, dynamic>))
+        .toList();
   }
 
   /// What an offer would do to the trip, without committing to it. Feeds the

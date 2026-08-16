@@ -94,11 +94,11 @@ export class AmadeusProvider implements FlightProvider {
    * On-Demand Flight Status, which answers "what does this flight number do on
    * this date" — a schedule question, not a shopping one.
    *
-   * A 404 or an empty payload means no such flight that day. That is returned
-   * as null rather than thrown: a mistyped digit is the ordinary case here and
-   * must not read to the user as the service being down.
+   * A 404 or an empty payload means no such flight that day. That comes back
+   * as an empty list rather than thrown: a mistyped digit is the ordinary case
+   * here and must not read to the user as the service being down.
    */
-  async lookupFlight(query: FlightLookup): Promise<FlightItinerary | null> {
+  async lookupFlights(query: FlightLookup): Promise<FlightItinerary[]> {
     const carrierCode = query.flight_number.slice(0, 2);
     const number = query.flight_number.slice(2).replace(/^0+/, '');
 
@@ -110,45 +110,47 @@ export class AmadeusProvider implements FlightProvider {
         scheduledDepartureDate: query.scheduled_date,
       });
     } catch (err) {
-      if (err instanceof UpstreamError && err.upstreamStatus === 404) return null;
+      if (err instanceof UpstreamError && err.upstreamStatus === 404) return [];
       throw err;
     }
 
-    const points = body.data?.[0]?.flightPoints ?? [];
-    if (points.length < 2) return null;
+    // One entry per departure that number makes on the date.
+    return (body.data ?? []).flatMap((flight) => {
+      const points = flight.flightPoints ?? [];
+      if (points.length < 2) return [];
 
-    const first = points[0]!;
-    const last = points[points.length - 1]!;
-    const departsAt = first.departure?.timings?.[0]?.value;
-    const arrivesAt = last.arrival?.timings?.[0]?.value;
-    if (!departsAt || !arrivesAt) return null;
+      const first = points[0]!;
+      const last = points[points.length - 1]!;
+      const departsAt = first.departure?.timings?.[0]?.value;
+      const arrivesAt = last.arrival?.timings?.[0]?.value;
+      if (!departsAt || !arrivesAt) return [];
 
-    // Amadeus returns local times with an offset; the rest of this codebase
-    // treats flight times as local-to-their-airport and reads them off the
-    // string, so the offset is trimmed rather than converted.
-    const departs = departsAt.slice(0, 19);
-    const arrives = arrivesAt.slice(0, 19);
+      // Amadeus returns each time as local-with-offset. The rest of this
+      // codebase treats flight times as local to their own airport and reads
+      // them off the string, so the offset is trimmed rather than converted:
+      // AK892 leaving at 16:55 GMT+8 and returning at 18:45 GMT+7 should both
+      // read as the traveller's boarding pass does.
+      const departs = departsAt.slice(0, 19);
+      const arrives = arrivesAt.slice(0, 19);
 
-    return {
-      direction: query.direction,
-      duration_minutes: minutesBetween(departs, arrives),
-      // The schedule feed describes one marketed flight number; a codeshare
-      // with a stop still arrives when it arrives, which is all the envelope
-      // needs.
-      stops: Math.max(points.length - 2, 0),
-      segments: [
-        {
-          origin: first.iataCode,
-          destination: last.iataCode,
-          departs_at: departs,
-          arrives_at: arrives,
-          carrier_code: carrierCode,
-          flight_number: query.flight_number,
-          duration_minutes: minutesBetween(departs, arrives),
-          aircraft: null,
-        },
-      ],
-    };
+      return [{
+        direction: query.direction,
+        duration_minutes: minutesBetween(departs, arrives),
+        stops: Math.max(points.length - 2, 0),
+        segments: [
+          {
+            origin: first.iataCode,
+            destination: last.iataCode,
+            departs_at: departs,
+            arrives_at: arrives,
+            carrier_code: carrierCode,
+            flight_number: query.flight_number,
+            duration_minutes: minutesBetween(departs, arrives),
+            aircraft: null,
+          },
+        ],
+      }];
+    });
   }
 
   async searchAirports(keyword: string): Promise<AirportMatch[]> {
