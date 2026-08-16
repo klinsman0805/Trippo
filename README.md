@@ -325,6 +325,19 @@ day is exactly the bug that would follow.
 activity with no part of the day cannot be reasoned about when working out what
 a flight leaves usable.
 
+**Order within a slot is the array order.** Nothing stores an explicit index —
+the stored array *is* the order, so a drag cannot drift out of sync with what
+is rendered. The day sort is by slot only and JS sorts are stable, which is
+what makes a reorder survive every later write. Time ordering is applied only
+when a time is set or changed, so saving a title edit never quietly undoes a
+drag.
+
+Reordering is offered two ways on the same grip: drag it, or tap it for an
+explicit up/down menu. The handoff's accessibility note requires the second —
+a drag is unreachable by keyboard and awkward with a screen reader — and the
+first is what most people will actually do. A slot holding one activity shows
+an inert grip rather than an affordance that cannot act.
+
 **An empty day is a to-do, not a constraint.** Neutral dashed treatment and a
 hollow terracotta chip ring, deliberately distinct from the amber short-day dot
 that means "the flight left no time". One invites an action; the other explains

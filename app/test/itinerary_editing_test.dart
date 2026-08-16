@@ -1,7 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart' hide TimeOfDay;
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trippo/api/api_client.dart';
+import 'package:trippo/api/trippo_api.dart';
 import 'package:trippo/design/theme.dart';
 import 'package:trippo/models/plan.dart';
+import 'package:trippo/models/trip.dart';
+import 'package:trippo/state/wayfare_controller.dart';
 import 'package:trippo/screens/wayfare/itinerary/activity_sheet.dart';
 import 'package:trippo/screens/wayfare/itinerary/activity_sheets.dart';
 import 'package:trippo/screens/wayfare/itinerary/day_editing.dart';
@@ -13,12 +21,17 @@ Future<void> pump(
   Widget child, {
   WayfarePlatform platform = WayfarePlatform.ios,
 }) async {
+  // The theme goes at MaterialApp.builder, exactly as the real app does.
+  // A drag lifts the card into the app's Overlay, which sits *above* the
+  // route — a theme provided inside `home` would be invisible to it, and the
+  // card would assert mid-drag.
   await tester.pumpWidget(
     MaterialApp(
-      home: WayfareTheme(
+      builder: (context, inner) => WayfareTheme(
         platform: platform,
-        child: Scaffold(body: SingleChildScrollView(child: child)),
+        child: inner ?? const SizedBox.shrink(),
       ),
+      home: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   );
 }
@@ -54,6 +67,66 @@ PlanBlock block({
       pinned: source == 'user',
       estimatedCostPerPerson: cost,
     );
+
+/// A controller holding one day: [morningCount] morning activities plus one
+/// in the afternoon, so slot grouping is observable.
+WayfareController editableController({
+  int morningCount = 2,
+  List<Map<String, dynamic>>? recorder,
+}) {
+  final client = recorder == null
+      ? ApiClient(baseUrl: 'http://localhost:0')
+      : ApiClient(
+          baseUrl: 'http://stub',
+          client: MockClient((request) async {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            recorder.add({'path': request.url.path, ...body});
+            // The plan the server would return is irrelevant here; the test is
+            // about what the drag asks for.
+            return http.Response(
+              jsonEncode({
+                'plan': {
+                  'status': 'complete',
+                  'trip': {'currency': 'MYR'},
+                  'itinerary': <dynamic>[],
+                },
+              }),
+              200,
+            );
+          }),
+        );
+
+  final controller = WayfareController(TrippoApi(client), 'trip_test');
+  controller.trip = Trip(
+    id: 'trip_test',
+    title: 'Ipoh',
+    destinations: const ['Ipoh'],
+    currency: 'MYR',
+    updatedAt: DateTime(2026, 11, 1),
+  );
+  controller.plan = Plan(
+    conversationalSummary: '',
+    status: PlanStatus.complete,
+    trip: TripSummary.fromJson(const {'currency': 'MYR'}),
+    itinerary: [
+      PlanDay(
+        day: 1,
+        location: 'Ipoh',
+        blocks: [
+          for (var i = 0; i < morningCount; i++)
+            block(
+              id: 'm$i',
+              activity: 'Morning thing $i',
+              slot: TimeOfDay.morning,
+            ),
+          block(id: 'a1', activity: 'Cave temple', slot: TimeOfDay.afternoon),
+        ],
+      ),
+    ],
+  );
+  controller.loading = false;
+  return controller;
+}
 
 void main() {
   group('The activity card', () {
@@ -433,6 +506,117 @@ void main() {
         find.text('Replan everything — replaces your two activities'),
         findsOneWidget,
       );
+    });
+  });
+
+  group('Reordering within a slot', () {
+    /// A day in edit mode, so the grips and reorderable lists are live.
+    Widget dayInEditMode(WayfareController controller) => TripTab(
+          controller: controller,
+          onAddActivity: (_) {},
+          onEditActivity: (_) {},
+          onMoveActivity: (_) {},
+          onChangeDayCount: () {},
+        );
+
+    testWidgets('the grip offers an explicit menu, not only a drag',
+        (tester) async {
+      final controller = editableController();
+      controller.startEditingDay(1);
+
+      await pump(tester, dayInEditMode(controller));
+
+      // Drag is unreachable by keyboard and awkward with a screen reader, so
+      // the same grip has to work by tapping.
+      expect(find.byType(ReorderGrip), findsNWidgets(3));
+      await tapDown(tester, find.byType(ReorderGrip).first);
+
+      expect(find.text('Move down'), findsOneWidget);
+      expect(find.text('Move up'), findsOneWidget);
+    });
+
+    testWidgets('the first item cannot move up, the last cannot move down',
+        (tester) async {
+      final controller = editableController();
+      controller.startEditingDay(1);
+      await pump(tester, dayInEditMode(controller));
+
+      await tapDown(tester, find.byType(ReorderGrip).first);
+      final up = tester.widget<PopupMenuItem<int>>(
+        find.widgetWithText(PopupMenuItem<int>, 'Move up'),
+      );
+      expect(up.enabled, isFalse);
+      final down = tester.widget<PopupMenuItem<int>>(
+        find.widgetWithText(PopupMenuItem<int>, 'Move down'),
+      );
+      expect(down.enabled, isTrue);
+    });
+
+    testWidgets('each slot reorders separately, so a drag cannot cross slots',
+        (tester) async {
+      final controller = editableController();
+      controller.startEditingDay(1);
+      await pump(tester, dayInEditMode(controller));
+
+      // Two morning activities and one afternoon → two independent lists.
+      expect(find.byType(ReorderableListView), findsNWidgets(2));
+    });
+
+    testWidgets('a lone activity in a slot has nothing to reorder against',
+        (tester) async {
+      final controller = editableController(morningCount: 1);
+      controller.startEditingDay(1);
+      await pump(tester, dayInEditMode(controller));
+
+      // Both slots hold one thing, so every grip is inert rather than
+      // offering an action that would do nothing.
+      final grips = tester.widgetList<ReorderGrip>(find.byType(ReorderGrip));
+      expect(grips.every((g) => !g.canMoveUp && !g.canMoveDown), isTrue);
+    });
+
+    testWidgets('dragging a card down reorders it within its slot',
+        (tester) async {
+      final requests = <Map<String, dynamic>>[];
+      final controller = editableController(
+        recorder: requests,
+        morningCount: 3,
+      );
+      controller.startEditingDay(1);
+      await pump(tester, dayInEditMode(controller));
+
+      // Drag the first morning card past the second. The gesture itself is
+      // what is under test here — the menu path is covered above, and this is
+      // the half no amount of callback wiring can stand in for.
+      final handle = find.byType(ReorderableDragStartListener).first;
+      final start = tester.getCenter(handle);
+      final gesture = await tester.startGesture(start, pointer: 7);
+      await tester.pump(const Duration(milliseconds: 100));
+      for (final dy in const [30.0, 140.0, 260.0]) {
+        await gesture.moveTo(start + Offset(0, dy));
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(
+        requests,
+        isNotEmpty,
+        reason: 'the drag must actually reach the server',
+      );
+      expect(requests.last['path'], contains('/blocks/m0/reorder'));
+      expect(
+        requests.last['to_index'],
+        greaterThan(0),
+        reason: 'dragging down must not land back where it started',
+      );
+    });
+
+    testWidgets('reading mode has no grips at all', (tester) async {
+      final controller = editableController();
+      await pump(tester, dayInEditMode(controller));
+
+      expect(find.byType(ReorderGrip), findsNothing);
+      expect(find.byType(ReorderableListView), findsNothing);
     });
   });
 

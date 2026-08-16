@@ -6,6 +6,7 @@ import { listAcknowledged, setAcknowledged } from './conflicts.js';
 import {
   addBlock,
   createBlankPlan,
+  reorderBlock,
   moveBlock,
   pinnedSummary,
   removeBlock,
@@ -219,6 +220,23 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       getTrip(req.params.id);
       return { plan: removeBlock(req.params.id, req.params.blockId) };
+    },
+  );
+
+  /** Drag, or the menu behind the same grip. Index counts within the slot. */
+  app.post<{ Params: { id: string; blockId: string } }>(
+    '/trips/:id/plan/blocks/:blockId/reorder',
+    async (req) => {
+      getTrip(req.params.id);
+      const parsed = z
+        .object({ to_index: z.number().int().min(0) })
+        .safeParse(req.body);
+      if (!parsed.success) {
+        throw badRequest('validation_error', 'Expected { to_index }', parsed.error.flatten());
+      }
+      return {
+        plan: reorderBlock(req.params.id, req.params.blockId, parsed.data.to_index),
+      };
     },
   );
 

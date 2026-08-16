@@ -90,10 +90,7 @@ class TripTab extends StatelessWidget {
                         : null,
                   )
                 else
-                  for (final block in controller.visibleBlocks) ...[
-                    _activityRow(block, currency),
-                    const SizedBox(height: WayfareSpace.cardGap),
-                  ],
+                  ..._slotGroups(currency),
                 // A short day says why it is short rather than being padded.
                 if (controller.dateEnvelope?.shortDayFor(day.day) case final short?)
                   _EmptySlotRow(short: short),
@@ -159,44 +156,49 @@ class TripTab extends StatelessWidget {
     );
   }
 
-  /// One activity, plus the edit-mode furniture around it.
+  /// The day's activities, grouped by slot.
   ///
-  /// The card itself is untouched in either mode — a hand-written activity and
-  /// a generated one stay pixel-identical, and reading never changes shape.
-  Widget _activityRow(PlanBlock block, String currency) {
-    final card = ActivityCard(
-      block: block,
-      members: controller.members,
-      currency: currency,
-    );
+  /// Reading mode is a plain column. Edit mode makes each slot its own
+  /// reorderable list, because a drag may only rearrange siblings — dragging
+  /// across a slot boundary would silently change what part of the day an
+  /// activity belongs to, which is the slot's decision, not the finger's.
+  List<Widget> _slotGroups(String currency) {
+    final blocks = controller.visibleBlocks;
 
-    if (!controller.isEditingDay) return card;
+    if (!controller.isEditingDay) {
+      return [
+        for (final block in blocks) ...[
+          ActivityCard(
+            block: block,
+            members: controller.members,
+            currency: currency,
+          ),
+          const SizedBox(height: WayfareSpace.cardGap),
+        ],
+      ];
+    }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const ReorderGrip(),
-        Expanded(
-          child: GestureDetector(
-            onTap: () => onEditActivity(block),
-            child: card,
+    const order = [
+      TimeOfDay.morning,
+      TimeOfDay.afternoon,
+      TimeOfDay.evening,
+      TimeOfDay.anytime,
+    ];
+
+    return [
+      for (final slot in order)
+        if (blocks.any((b) => b.timeOfDay == slot))
+          _ReorderableSlot(
+            key: ValueKey('slot-${controller.selectedDay}-${slot.name}'),
+            slot: slot,
+            blocks: blocks.where((b) => b.timeOfDay == slot).toList(),
+            members: controller.members,
+            currency: currency,
+            onEdit: onEditActivity,
+            onMove: onMoveActivity,
+            onReorder: controller.reorderActivity,
           ),
-        ),
-        SizedBox(
-          width: WayfareTouch.ios,
-          height: WayfareTouch.ios,
-          child: IconButton(
-            onPressed: () => onMoveActivity(block),
-            tooltip: 'Move to another day',
-            icon: const Icon(
-              Icons.swap_vert,
-              size: 20,
-              color: WayfareColors.inkSecondary,
-            ),
-          ),
-        ),
-      ],
-    );
+    ];
   }
 
   Widget _dayChips(BuildContext context, Plan plan) {
@@ -376,6 +378,101 @@ class _DayChip extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// One slot's activities, reorderable among themselves.
+class _ReorderableSlot extends StatelessWidget {
+  const _ReorderableSlot({
+    super.key,
+    required this.slot,
+    required this.blocks,
+    required this.members,
+    required this.currency,
+    required this.onEdit,
+    required this.onMove,
+    required this.onReorder,
+  });
+
+  final TimeOfDay slot;
+  final List<PlanBlock> blocks;
+  final List<Member> members;
+  final String currency;
+  final ValueChanged<PlanBlock> onEdit;
+  final ValueChanged<PlanBlock> onMove;
+  final void Function(String blockId, int toIndex) onReorder;
+
+  static String _slotName(TimeOfDay slot) => switch (slot) {
+        TimeOfDay.morning => 'the morning',
+        TimeOfDay.afternoon => 'the afternoon',
+        TimeOfDay.evening => 'the evening',
+        TimeOfDay.anytime => 'anytime',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return ReorderableListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      itemCount: blocks.length,
+      // onReorderItem, not onReorder: it hands back the index the item
+      // actually lands on, rather than the pre-removal insertion point that
+      // makes every downward drag one too far.
+      onReorderItem: (from, to) {
+        if (to == from) return;
+        onReorder(blocks[from].id, to);
+      },
+      proxyDecorator: (child, _, animation) => Material(
+        color: Colors.transparent,
+        elevation: 6 * animation.value,
+        borderRadius: WayfareTheme.of(context).card,
+        child: child,
+      ),
+      itemBuilder: (context, i) {
+        final block = blocks[i];
+        return Padding(
+          key: ValueKey(block.id),
+          padding: const EdgeInsets.only(bottom: WayfareSpace.cardGap),
+          child: Row(
+            children: [
+              ReorderGrip(
+                index: i,
+                positionLabel:
+                    '${i + 1} of ${blocks.length} in ${_slotName(slot)}',
+                canMoveUp: i > 0,
+                canMoveDown: i < blocks.length - 1,
+                onMoveUp: () => onReorder(block.id, i - 1),
+                onMoveDown: () => onReorder(block.id, i + 1),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => onEdit(block),
+                  child: ActivityCard(
+                    block: block,
+                    members: members,
+                    currency: currency,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: WayfareTouch.ios,
+                height: WayfareTouch.ios,
+                child: IconButton(
+                  onPressed: () => onMove(block),
+                  tooltip: 'Move to another day',
+                  icon: const Icon(
+                    Icons.swap_vert,
+                    size: 20,
+                    color: WayfareColors.inkSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

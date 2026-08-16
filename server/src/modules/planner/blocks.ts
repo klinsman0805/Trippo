@@ -185,6 +185,7 @@ export function addBlock(tripId: string, day: number, input: BlockInput): Plan {
   });
 
   sortDay(target.blocks);
+  if (input.start_time) applyTimeOrder(target.blocks, input.time_of_day ?? 'anytime');
   return persist(record, plan);
 }
 
@@ -205,7 +206,12 @@ export function updateBlock(tripId: string, blockId: string, input: BlockInput):
   });
 
   const day = plan.itinerary.find((d) => d.day === found.day);
-  if (day) sortDay(day.blocks);
+  if (day) {
+    sortDay(day.blocks);
+    // Only when the edit touched the time — otherwise a save would quietly
+    // undo a drag the user made a moment earlier.
+    if ('start_time' in input) applyTimeOrder(day.blocks, found.block.time_of_day);
+  }
   return persist(record, plan);
 }
 
@@ -268,12 +274,15 @@ export function setPinned(tripId: string, blockId: string, pinned: boolean): Pla
 }
 
 /**
- * Reorder within a day.
+ * Order within a day.
  *
- * Timed activities first in time order, then untimed ones in slot order, then
- * anything marked `anytime`. Ordering *across* slots is not a thing the user
- * controls — the slot decides that — so this runs on every write rather than
- * being an operation the client has to remember to request.
+ * Slot decides the grouping; **array order decides the rest**. Nothing stores
+ * an explicit index — the stored array *is* the order, which is why a drag
+ * needs no new field and cannot drift out of sync with what is rendered.
+ *
+ * The sort is by slot only, and JS sorts are stable, so two activities in the
+ * same slot keep whatever order they were put in. That is what makes an
+ * explicit reorder survive every later write.
  */
 const SLOT_ORDER: Record<PlanBlock['time_of_day'], number> = {
   morning: 0,
@@ -283,15 +292,70 @@ const SLOT_ORDER: Record<PlanBlock['time_of_day'], number> = {
 };
 
 export function sortDay(blocks: PlanBlock[]): void {
-  blocks.sort((a, b) => {
-    const slotDelta = SLOT_ORDER[a.time_of_day] - SLOT_ORDER[b.time_of_day];
-    if (slotDelta !== 0) return slotDelta;
-    // Within a slot, a stated time wins over one that was never given.
+  blocks.sort((a, b) => SLOT_ORDER[a.time_of_day] - SLOT_ORDER[b.time_of_day]);
+}
+
+/**
+ * Put one slot in time order: stated times first and ascending, then the rest
+ * in the order they were already in.
+ *
+ * Run only when a time is set or changed, never on every write. "The day
+ * orders itself by time" is what happens when you give it one — it is not a
+ * rule that should quietly undo a drag afterwards.
+ */
+export function applyTimeOrder(blocks: PlanBlock[], slot: PlanBlock['time_of_day']): void {
+  const inSlot = blocks.filter((b) => b.time_of_day === slot);
+  const ordered = [...inSlot].sort((a, b) => {
     if (a.start_time && b.start_time) return a.start_time.localeCompare(b.start_time);
     if (a.start_time) return -1;
     if (b.start_time) return 1;
     return 0;
   });
+
+  let i = 0;
+  for (let j = 0; j < blocks.length; j++) {
+    if (blocks[j]!.time_of_day === slot) blocks[j] = ordered[i++]!;
+  }
+}
+
+/**
+ * Move one activity within its own slot.
+ *
+ * Across slots is not the user's to set — the slot decides that — so a drag
+ * can only ever rearrange siblings. `toIndex` counts within the slot, not
+ * within the day, so the client never has to reason about the day's whole
+ * array.
+ */
+export function reorderBlock(tripId: string, blockId: string, toIndex: number): Plan {
+  const record = loadPlan(tripId);
+  const plan = record.plan;
+  ensureBlockIds(plan);
+
+  const found = allBlocks(plan).find((b) => b.block.id === blockId);
+  if (!found) throw notFound('block_not_found', `No activity with id ${blockId}`);
+
+  const day = plan.itinerary.find((d) => d.day === found.day);
+  if (!day) throw notFound('block_not_found', `No activity with id ${blockId}`);
+
+  const slot = found.block.time_of_day;
+  const siblings = day.blocks.filter((b) => b.time_of_day === slot);
+  const from = siblings.findIndex((b) => b.id === blockId);
+  if (from < 0) throw notFound('block_not_found', `No activity with id ${blockId}`);
+
+  const target = Math.max(0, Math.min(toIndex, siblings.length - 1));
+  if (target === from) return plan;
+
+  const [moved] = siblings.splice(from, 1);
+  siblings.splice(target, 0, moved!);
+
+  // Write the reordered siblings back into the positions the slot already
+  // occupies, so activities in other slots do not shift underneath.
+  let i = 0;
+  for (let j = 0; j < day.blocks.length; j++) {
+    if (day.blocks[j]!.time_of_day === slot) day.blocks[j] = siblings[i++]!;
+  }
+
+  return persist(record, plan);
 }
 
 /** What the regenerate sheet reports, and what generation has to honour. */
