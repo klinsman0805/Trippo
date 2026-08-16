@@ -176,11 +176,14 @@ class _WayfareShellState extends State<WayfareShell> {
             ? 'No numbers yet'
             : 'No itinerary yet',
         note: _controller.members.isEmpty
-            ? 'Hit Generate whenever you like. Adding travellers first makes '
+            ? 'Generate one whenever you like. Adding travellers first makes '
                 'the plan fit the group, but it is not required.'
             : 'You have ${_controller.members.length} '
                 '${_controller.members.length == 1 ? 'traveller' : 'travellers'} '
-                'ready. Hit Generate and this fills in.',
+                'ready. Generate and this fills in.',
+        canGenerate: _controller.canGenerate,
+        onGenerate: _controller.generate,
+        memberCount: _controller.members.length,
         onGoToGroup: () => _controller.goTo(WayfareTab.group),
       );
     }
@@ -695,15 +698,27 @@ class _StartOption extends StatelessWidget {
   }
 }
 
+/// Dates are set but nothing is planned yet.
+///
+/// Leads with generating, because that is what the user came here to do.
+/// Travellers are an improvement offered underneath, not a gate — sending
+/// someone to the Group tab to unlock a button that was never locked is how
+/// this screen used to read.
 class _BlankState extends StatelessWidget {
   const _BlankState({
     required this.title,
     required this.note,
+    required this.canGenerate,
+    required this.onGenerate,
+    required this.memberCount,
     required this.onGoToGroup,
   });
 
   final String title;
   final String note;
+  final bool canGenerate;
+  final VoidCallback onGenerate;
+  final int memberCount;
   final VoidCallback onGoToGroup;
 
   @override
@@ -732,12 +747,30 @@ class _BlankState extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          WayfarePrimaryButton(
-            label: 'Go to the group',
-            onPressed: onGoToGroup,
-            fontSize: 14.5,
-            weight: FontWeight.w500,
-          ),
+          if (canGenerate)
+            WayfarePrimaryButton(
+              label: 'Generate the itinerary',
+              onPressed: onGenerate,
+              fontSize: 14.5,
+              weight: FontWeight.w500,
+            )
+          else
+            Text(
+              'Add a destination first — the planner needs somewhere to go.',
+              textAlign: TextAlign.center,
+              style: WayfareType.body(12.5, color: WayfareColors.mutedLight),
+            ),
+          if (memberCount < 2) ...[
+            const SizedBox(height: 10),
+            WayfareSecondaryButton(
+              label: memberCount == 0
+                  ? 'Add who is coming'
+                  : 'Add another traveller',
+              onPressed: onGoToGroup,
+              fontSize: 13.5,
+              foreground: WayfareColors.muted,
+            ),
+          ],
         ],
       ),
     );
