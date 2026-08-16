@@ -153,6 +153,20 @@ times gives 70 minutes for a flight that takes 2h10m; the UTC pair gives 130.
 whole flow is testable offline; `amadeus` wraps Flight Offers Search v2 and
 On-Demand Flight Status.
 
+**Schedule lookups are cached for six hours**, keyed on number and date but
+*not* direction. The free plan allows 600 requests a month and this endpoint
+gets asked the same question repeatedly — a mistyped date corrected, a sheet
+backed out of and reopened, the wrong departure picked and changed. A published
+schedule does not move hour to hour, so repeats are served from memory. In
+practice four lookups cost one request.
+
+Two answers that are **not** errors and must not read as one: `204 No Content`
+means the flight does not operate that day, and `404` means no such number.
+Both come back as an empty list. A `429` waits out the stated interval —
+free tiers commonly allow one request per second, and the default backoff
+started below that, so a retry landed inside the same window and spent another
+request failing.
+
 Every offer carries `is_estimate`. It is true for all mock offers **and** for
 anything from `test.api.amadeus.com`, whose inventory is cached and not
 bookable. The client must label these — showing a sandbox fare as a real price

@@ -154,9 +154,9 @@ function arrivalShortDay(arrival: string, date: string): ShortDay | null {
       ? `The flight lands at ${at}. Day 1 is the transfer and sleep, nothing else.`
       : isRedEye
         ? `The flight lands at ${at}, so the morning goes to sleeping it off. ` +
-          `Only the ${formatList(usable)} are usable.`
+          `Only the ${usableClause(usable)}.`
         : `The flight lands at ${at} and the transfer into town takes about an hour. ` +
-          `Only the ${formatList(usable)} are usable.`,
+          `Only the ${usableClause(usable)}.`,
   };
 }
 
@@ -186,7 +186,7 @@ function sameDayShort(
     note: usable.length === 0
       ? `Landing ${from} and leaving ${to} leaves no usable time on the ground.`
       : `You land at ${from} and leave at ${to}, so only the ` +
-        `${formatList(usable)} are usable.`,
+        `${usableClause(usable)}.`,
   };
 }
 
@@ -211,7 +211,7 @@ function departureShortDay(
       usable.length === 0
         ? `A ${at} departure means leaving for the airport before the day starts. ` +
           `This day is packing and the transfer, nothing else.`
-        : `A ${at} departure ends the day early. Only the ${formatList(usable)} are usable.`,
+        : `A ${at} departure ends the day early. Only the ${usableClause(usable)}.`,
   };
 }
 
@@ -226,6 +226,17 @@ function daysBetweenInclusive(start: string, end: string): number {
 function formatList(slots: Slot[]): string {
   if (slots.length === 1) return slots[0]!;
   return `${slots.slice(0, -1).join(', ')} and ${slots.at(-1)}`;
+}
+
+/**
+ * "the evening is usable" / "the morning and afternoon are usable".
+ *
+ * A real 18:10 landing leaves exactly one slot, and the sentence read "Only
+ * the evening are usable" — the kind of thing that only shows up once the
+ * numbers come from a real flight rather than a sample with two slots left.
+ */
+function usableClause(slots: Slot[]): string {
+  return `${formatList(slots)} ${slots.length === 1 ? 'is' : 'are'} usable`;
 }
 
 /**

@@ -13,6 +13,15 @@ export interface FetchOptions extends RequestInit {
 
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
+/**
+ * How long to wait after a 429 that gives no `Retry-After`.
+ *
+ * Free API tiers commonly allow one request per second, and the standard
+ * backoff here starts below that — so a retry landed inside the same window
+ * and burned another request. This clears a one-per-second limit.
+ */
+const RATE_LIMIT_PAUSE_MS = 1_300;
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -47,6 +56,21 @@ export async function fetchWithRetry(url: string, opts: FetchOptions = {}): Prom
 
       if (RETRYABLE_STATUS.has(res.status) && attempt < retries) {
         lastError = new UpstreamError(provider, `HTTP ${res.status}`, res.status);
+        // The discarded body still holds an open stream; leaving it undrained
+        // leaks a connection per retry.
+        await res.body?.cancel().catch(() => {});
+        // A rate limit is not congestion — it is a stated interval, and
+        // retrying inside it just spends another request failing. Honour
+        // Retry-After when it is given, and otherwise wait past the
+        // per-second limits these plans typically enforce.
+        if (res.status === 429) {
+          const retryAfter = Number(res.headers.get('retry-after'));
+          await sleep(
+            Number.isFinite(retryAfter) && retryAfter > 0
+              ? Math.min(retryAfter * 1000, 10_000)
+              : RATE_LIMIT_PAUSE_MS,
+          );
+        }
         continue;
       }
 
@@ -111,12 +135,20 @@ export async function readTextCapped(res: Response, maxBytes: number): Promise<s
   );
 }
 
-/** Parse a JSON API response, turning non-2xx into an UpstreamError. */
+/**
+ * Parse a JSON API response, turning non-2xx into an UpstreamError.
+ *
+ * A successful response with no body is returned as `null` rather than treated
+ * as malformed. `204 No Content` is a real answer — several APIs use it for
+ * "nothing matched" — and reporting it as a parse failure turns an ordinary
+ * empty result into what looks like an outage.
+ */
 export async function jsonOrThrow<T>(res: Response, provider: string): Promise<T> {
   const text = await res.text();
   if (!res.ok) {
     throw new UpstreamError(provider, `HTTP ${res.status}: ${text.slice(0, 500)}`, res.status);
   }
+  if (res.status === 204 || text.trim() === '') return null as T;
   try {
     return JSON.parse(text) as T;
   } catch {

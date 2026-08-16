@@ -1,7 +1,25 @@
 import { env } from '../../config/env.js';
+import { TtlCache } from '../../lib/cache.js';
 import { fetchWithRetry, jsonOrThrow } from '../../lib/http.js';
 import { UpstreamError } from '../../lib/errors.js';
 import type { FlightItinerary, FlightLookup, ScheduleProvider } from './types.js';
+
+/**
+ * Cached lookups, because the quota is small and the answer barely moves.
+ *
+ * The free plan allows 600 requests a month, and this endpoint gets hit
+ * repeatedly for the same thing: a user mistypes a date and corrects it, backs
+ * out of the sheet and returns, or picks the wrong departure and taps Change.
+ * A published schedule for a future date does not change hour to hour, so
+ * serving those from memory costs nothing and is the difference between a
+ * usable free tier and one exhausted in an afternoon.
+ *
+ * Six hours: long enough to cover a planning session and any number of
+ * false starts, short enough that a genuine schedule change is picked up the
+ * same day.
+ */
+const SCHEDULE_TTL_MS = 6 * 60 * 60 * 1000;
+const scheduleCache = new TtlCache<FlightItinerary[]>(SCHEDULE_TTL_MS, 500);
 
 /**
  * AeroDataBox — schedules only, no fares.
@@ -29,6 +47,18 @@ export class AeroDataBoxProvider implements ScheduleProvider {
       throw new UpstreamError('aerodatabox', 'AERODATABOX_API_KEY is not configured.');
     }
 
+    // Keyed without `direction`, which only labels the leg and does not change
+    // what the API is asked — otherwise the same flight would be fetched twice
+    // for a return trip.
+    return scheduleCache.wrap(
+      `${query.flight_number}:${query.scheduled_date}`,
+      () => this.fetchSchedules(query),
+    ).then((itineraries) =>
+      itineraries.map((it) => ({ ...it, direction: query.direction })),
+    );
+  }
+
+  private async fetchSchedules(query: FlightLookup): Promise<FlightItinerary[]> {
     const url =
       `https://${env.AERODATABOX_HOST}/flights/number/` +
       `${encodeURIComponent(query.flight_number)}/${query.scheduled_date}` +
@@ -46,10 +76,13 @@ export class AeroDataBoxProvider implements ScheduleProvider {
           'X-RapidAPI-Host': env.AERODATABOX_HOST,
         },
       });
-      body = await jsonOrThrow<AeroDataBoxFlight[]>(res, 'aerodatabox');
+      // 204 for a date the flight does not operate — AK892 flies KUL–DMK
+      // most days but not every day, and that is an ordinary answer rather
+      // than an error.
+      body = (await jsonOrThrow<AeroDataBoxFlight[] | null>(res, 'aerodatabox')) ?? [];
     } catch (err) {
-      // No such flight that day is an ordinary answer — a mistyped digit,
-      // usually — and must stay distinguishable from the service being down.
+      // Nor is a 404 an outage: a mistyped digit is the common case here, and
+      // both have to stay distinguishable from the service being down.
       if (err instanceof UpstreamError && err.upstreamStatus === 404) return [];
       throw err;
     }
