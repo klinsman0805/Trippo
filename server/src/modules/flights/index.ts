@@ -1,9 +1,10 @@
 import { env } from '../../config/env.js';
 import { db, newId, nowIso } from '../../db/index.js';
 import { notFound, unavailable } from '../../lib/errors.js';
+import { AeroDataBoxProvider } from './aerodatabox.js';
 import { AmadeusProvider } from './amadeus.js';
 import { MockFlightProvider } from './mock.js';
-import type { FlightOffer, FlightProvider } from './types.js';
+import type { FlightOffer, FlightProvider, ScheduleProvider } from './types.js';
 
 let provider: FlightProvider | null = null;
 
@@ -24,6 +25,42 @@ export function flightProvider(): FlightProvider {
   }
 
   return provider;
+}
+
+let schedules: ScheduleProvider | null = null;
+
+/**
+ * Who answers "what does this flight number do on this date".
+ *
+ * Configured apart from the fare provider, because the two are different
+ * products from different vendors — see `ScheduleProvider`.
+ */
+export function scheduleProvider(): ScheduleProvider {
+  if (schedules) return schedules;
+
+  if (env.SCHEDULE_PROVIDER === 'aerodatabox') {
+    const adb = new AeroDataBoxProvider();
+    if (!adb.configured) {
+      throw unavailable(
+        'schedules_unavailable',
+        'SCHEDULE_PROVIDER is "aerodatabox" but AERODATABOX_API_KEY is not set. Set it, or switch SCHEDULE_PROVIDER to "mock".',
+      );
+    }
+    schedules = adb;
+  } else if (env.SCHEDULE_PROVIDER === 'amadeus') {
+    const amadeus = new AmadeusProvider();
+    if (!amadeus.configured) {
+      throw unavailable(
+        'schedules_unavailable',
+        'SCHEDULE_PROVIDER is "amadeus" but AMADEUS_CLIENT_ID/SECRET are not set.',
+      );
+    }
+    schedules = amadeus;
+  } else {
+    schedules = new MockFlightProvider();
+  }
+
+  return schedules;
 }
 
 // --- selected flights, which anchor the trip's dates ---

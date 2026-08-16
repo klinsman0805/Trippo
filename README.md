@@ -130,9 +130,28 @@ means users can paste the whole clipboard blob
 
 ### Flights (`server/src/modules/flights`)
 
-`FlightProvider` interface with two adapters. `mock` needs no credentials and
-returns deterministic synthetic offers so the whole flow is testable offline;
-`amadeus` wraps Flight Offers Search v2.
+**Two seams, because they are two markets.** Fares and schedules are sold by
+different vendors — every flight-status API offers schedules and no prices, and
+fare APIs answer "what does AK892 do on the 26th" poorly or not at all. Forcing
+one adapter to do both meant picking a vendor that was second-best at each.
+
+| | `FLIGHT_PROVIDER` (fares) | `SCHEDULE_PROVIDER` (by flight number) |
+|---|---|---|
+| Serves | "Haven't booked yet?" search | "I have my flight booked" |
+| Options | `mock`, `amadeus` | `mock`, `aerodatabox`, `amadeus` |
+| Free path | `mock`, or Amadeus's test env | AeroDataBox free plan via RapidAPI |
+
+AeroDataBox is the better fit for lookup: it publishes future schedules months
+ahead, and returns `scheduledTime.local` — a wall-clock time at each airport,
+which is exactly how this codebase stores flight times.
+
+**Durations come from the UTC pair, never the local one.** AK892 leaves KUL at
+16:55 (GMT+8) and lands in Bangkok at 18:05 (GMT+7). Subtracting the local
+times gives 70 minutes for a flight that takes 2h10m; the UTC pair gives 130.
+
+`mock` needs no credentials and returns deterministic synthetic data so the
+whole flow is testable offline; `amadeus` wraps Flight Offers Search v2 and
+On-Demand Flight Status.
 
 Every offer carries `is_estimate`. It is true for all mock offers **and** for
 anything from `test.api.amadeus.com`, whose inventory is cached and not

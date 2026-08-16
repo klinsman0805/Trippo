@@ -45,11 +45,22 @@ const EnvSchema = z.object({
   /** Override to point at a self-hosted MOTIS. */
   MOTIS_URL: z.string().url().default('https://api.transitous.org'),
 
-  // Flights. 'amadeus' needs the two client credentials; 'mock' needs nothing.
+  // Fares. 'amadeus' needs the two client credentials; 'mock' needs nothing.
   FLIGHT_PROVIDER: z.enum(['amadeus', 'mock']).default('mock'),
   AMADEUS_CLIENT_ID: z.string().optional(),
   AMADEUS_CLIENT_SECRET: z.string().optional(),
   AMADEUS_BASE_URL: z.string().url().default('https://test.api.amadeus.com'),
+
+  /**
+   * Schedules — "what does AK892 do on the 26th" — which is a different
+   * question from "what would a seat cost", and in practice a different
+   * vendor. Flight-status APIs sell no fares, and fare APIs answer schedule
+   * questions poorly, so the two are configured separately.
+   */
+  SCHEDULE_PROVIDER: z.enum(['aerodatabox', 'amadeus', 'mock']).default('mock'),
+  AERODATABOX_API_KEY: z.string().optional(),
+  /** RapidAPI gateway by default; set to the direct host if you buy direct. */
+  AERODATABOX_HOST: z.string().default('aerodatabox.p.rapidapi.com'),
 
   // Outbound fetch behaviour for link ingestion.
   INGEST_USER_AGENT: z
@@ -80,4 +91,10 @@ export const features = {
   flights:
     env.FLIGHT_PROVIDER === 'mock' ||
     Boolean(env.AMADEUS_CLIENT_ID && env.AMADEUS_CLIENT_SECRET),
+  /** Looking a booked flight up by number — separate from fares. */
+  schedules:
+    env.SCHEDULE_PROVIDER === 'mock' ||
+    (env.SCHEDULE_PROVIDER === 'aerodatabox'
+      ? Boolean(env.AERODATABOX_API_KEY)
+      : Boolean(env.AMADEUS_CLIENT_ID && env.AMADEUS_CLIENT_SECRET)),
 } as const;

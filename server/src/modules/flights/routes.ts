@@ -6,6 +6,7 @@ import {
   deleteSelection,
   flightProvider,
   listSelections,
+  scheduleProvider,
   saveSelection,
 } from './index.js';
 import { deriveTripEnvelope } from './envelope.js';
@@ -41,7 +42,7 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
       );
     }
 
-    const provider = flightProvider();
+    const provider = scheduleProvider();
     const itineraries = await provider.lookupFlights(parsed.data);
 
     // An empty list is a normal answer, not an error: a mistyped digit is the

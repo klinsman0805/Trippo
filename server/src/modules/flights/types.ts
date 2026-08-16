@@ -90,12 +90,26 @@ export interface AirportMatch {
   lng: number | null;
 }
 
+/** Fares: what a seat would cost. */
 export interface FlightProvider {
   readonly name: string;
   /** False when the adapter is configured but its credentials are missing. */
   readonly configured: boolean;
   search(query: FlightSearch): Promise<FlightOffer[]>;
   searchAirports(keyword: string): Promise<AirportMatch[]>;
+}
+
+/**
+ * Schedules: what a flight number does on a date.
+ *
+ * Separate from [FlightProvider] because it is separate in the market. Every
+ * flight-status API sells schedules and no fares; fare APIs answer schedule
+ * questions poorly or not at all. Forcing one adapter to do both meant picking
+ * a vendor that was second-best at each.
+ */
+export interface ScheduleProvider {
+  readonly name: string;
+  readonly configured: boolean;
   /**
    * Every departure that flight number makes on that date.
    *
