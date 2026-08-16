@@ -80,6 +80,9 @@ Color timeOfDayColor(plan_models.TimeOfDay time) => switch (time) {
       plan_models.TimeOfDay.morning => WayfareColors.morning,
       plan_models.TimeOfDay.afternoon => WayfareColors.afternoon,
       plan_models.TimeOfDay.evening => WayfareColors.evening,
+      // Not bound to a part of the day, so it gets the muted ink rather than
+      // borrowing a slot colour it does not belong to.
+      plan_models.TimeOfDay.anytime => WayfareColors.mutedLight,
     };
 
 /// `Lisbon → Sintra → Porto · 12 Sept–16 Sept`

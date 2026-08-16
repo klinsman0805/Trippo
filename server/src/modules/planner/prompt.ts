@@ -125,6 +125,8 @@ Each entry in "clarifying_questions" is a question you genuinely cannot plan wel
 - "options" lists the choices when answer_type is "choice", including an honest opt-out like "Not decided" where that is a real answer. Leave it empty for "text".
 - "placeholder" is a short hint for "text" questions, e.g. "Hotel or neighbourhood". Null for "choice".
 
+Every block's "time_of_day" must be "morning", "afternoon" or "evening". Never emit "anytime" — that value exists for activities a traveller adds by hand and cannot be reasoned about when working out which parts of a day a flight leaves usable.
+
 Ask only what actually blocks a decision. Three good questions beat eight thorough ones. If you can plan around something by stating an assumption instead, do that and put it in "assumptions".
 
 =========================================

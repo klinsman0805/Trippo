@@ -75,6 +75,20 @@ abstract final class WayfareColors {
   static const destructiveInk = Color(0xFF9C3F27);
   static const destructiveBorder = Color(0xFFE2C4BC);
 
+  // "You wrote this" — hue-matched to the evening dot so it cannot be confused
+  // with the amber optional/short-day family or the info blue used for chat.
+  static const writtenBg = Color(0xFFEAEEF6);
+  static const writtenBorder = Color(0xFFD4DCEA);
+  static const writtenInk = Color(0xFF3D4F78);
+  static const writtenInkDeep = Color(0xFF39445C);
+  static const writtenPinBorder = Color(0xFFC9D3E4);
+
+  /// An unfilled day is a to-do, not a constraint — deliberately neutral, so
+  /// it never reads as the amber "the flight left no time" treatment.
+  static const todoDashed = Color(0xFFD6CAB6);
+  static const todoBg = Color(0xFFFBF7EF);
+  static const gripLine = Color(0xFFA99C8B);
+
   // Loading skeletons
   static const skeletonDark = Color(0xFFEFE6D6);
   static const skeletonMid = Color(0xFFE9DFCD);

@@ -6,6 +6,7 @@ import { PLAN_JSON_SCHEMA, PlanSchema, type Plan } from '../../schemas/plan.js';
 import { listSelections } from '../flights/index.js';
 import { listPlaces } from '../trips/places.repo.js';
 import { getTrip, touchTrip } from '../trips/repo.js';
+import { ensureBlockIds, pinnedSummary, sortDay } from './blocks.js';
 import { buildPlannerContext } from './context.js';
 import { clearFailure, recordFailure } from './failure.js';
 import { VOYAGER_SYSTEM_PROMPT } from './prompt.js';
@@ -40,6 +41,22 @@ export async function generatePlan(
   const previous = getLatestPlan(tripId);
   let context = buildPlannerContext(trip, places, flights, userRequest);
 
+  // Anything the user wrote and kept pinned is a fixed point, not a
+  // suggestion. It is described to the planner as already-occupied time so it
+  // plans around it, and re-inserted afterwards so the result is authoritative
+  // rather than dependent on the model having complied.
+  const { pinned } = pinnedSummary(tripId);
+  if (pinned.length) {
+    context += `\n\n## ALREADY PLANNED BY THE TRAVELLER — DO NOT CHANGE OR REPLACE\nThese slots are taken. Plan around them, do not duplicate them, and do not emit them in your own output. Budget for them: they are already counted in the trip's cost.\n\n${pinned
+      .map(
+        ({ day, block }) =>
+          `- Day ${day}, ${block.time_of_day}${
+            block.start_time ? ` at ${block.start_time}` : ''
+          }: ${block.activity}${block.location ? ` (${block.location})` : ''}`,
+      )
+      .join('\n')}`;
+  }
+
   // On a refinement, show the model what it produced last time so it edits
   // rather than starts over — otherwise day 5 silently changes when the user
   // only asked about day 3.
@@ -67,7 +84,7 @@ export async function generatePlan(
     throw err;
   }
 
-  const record = savePlan(tripId, plan, userRequest);
+  const record = savePlan(tripId, reinstatePinned(plan, pinned), userRequest);
   clearFailure(tripId);
   return record;
 }
@@ -141,9 +158,43 @@ function unknownMemberIds(plan: Plan, validIds: string[]): string[] {
 
 // --- persistence ---
 
+/**
+ * Put the traveller's pinned activities back into the freshly planned days.
+ *
+ * The prompt asks the model to work around them, but a prompt is a request.
+ * This makes it true regardless: the pinned block is re-inserted, and anything
+ * the model produced in the same slot is left alone beside it rather than
+ * dropped — a double-booked slot is visible and fixable, whereas silently
+ * deleting the model's work would hide a planning failure.
+ */
+function reinstatePinned(
+  plan: Plan,
+  pinned: { day: number; block: Plan['itinerary'][number]['blocks'][number] }[],
+): Plan {
+  if (!pinned.length) return plan;
+  ensureBlockIds(plan);
+
+  for (const { day, block } of pinned) {
+    const target = plan.itinerary.find((d) => d.day === day);
+    if (!target) continue;
+    // The model was told not to emit these; if it did anyway, drop the copy
+    // rather than showing the activity twice.
+    target.blocks = target.blocks.filter(
+      (b) => b.activity.trim().toLowerCase() !== block.activity.trim().toLowerCase(),
+    );
+    target.blocks.push(block);
+    sortDay(target.blocks);
+  }
+
+  return plan;
+}
+
 function savePlan(tripId: string, plan: Plan, userRequest: string | null): PlanRecord {
   const revision = (getLatestPlan(tripId)?.revision ?? 0) + 1;
   const id = newId('plan');
+  // The model is not asked for block ids, so they are minted here — before the
+  // plan is ever stored, so nothing downstream sees an identity-less block.
+  ensureBlockIds(plan);
 
   db.prepare(
     `INSERT INTO plans (id, trip_id, revision, status, summary, plan, model, user_request, created_at)

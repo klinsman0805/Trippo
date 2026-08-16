@@ -15,13 +15,20 @@ PlanStatus planStatusFrom(String? value) => switch (value) {
       _ => PlanStatus.complete,
     };
 
-enum TimeOfDay { morning, afternoon, evening }
+/// Which part of the day an activity sits in.
+///
+/// `anytime` is user-only — the planner never emits it. It exists for things a
+/// person adds that are not bound to a part of the day, and it sorts last.
+enum TimeOfDay { morning, afternoon, evening, anytime }
 
 TimeOfDay timeOfDayFrom(String? value) => switch (value) {
       'afternoon' => TimeOfDay.afternoon,
       'evening' => TimeOfDay.evening,
+      'anytime' => TimeOfDay.anytime,
       _ => TimeOfDay.morning,
     };
+
+String timeOfDayTo(TimeOfDay slot) => slot.name;
 
 /// One budget category: what was intended against what the plan costs.
 /// The Budget tab draws these as two stacked bars.
@@ -144,6 +151,7 @@ class Conflict {
 
 class PlanBlock {
   const PlanBlock({
+    required this.id,
     required this.timeOfDay,
     required this.activity,
     required this.description,
@@ -153,13 +161,32 @@ class PlanBlock {
     required this.optional,
     this.estimatedCostPerPerson,
     this.weatherBackup,
+    this.startTime,
+    this.source = 'planner',
+    this.pinned = false,
   });
 
+  /// Stable identity. Every edit, move and removal names one of these.
+  final String id;
   final TimeOfDay timeOfDay;
+
+  /// Optional clock time, `HH:MM`. Display and ordering only — it never feeds
+  /// the date envelope, which comes from flights.
+  final String? startTime;
+
+  /// 'planner' or 'user'. Drives the `Yours` pill.
+  final String source;
+
+  /// Excluded from replanning. Defaults true for anything typed by a person.
+  final bool pinned;
+
+  /// Written by hand rather than planned.
+  bool get isMine => source == 'user';
   final String activity;
   final String description;
   final String location;
-  final num estimatedDurationMinutes;
+  /// Null when unknown — the card prints no duration rather than "0m".
+  final num? estimatedDurationMinutes;
   final num? estimatedCostPerPerson;
 
   /// Member ids. Fewer than the full group means this is a split-group block.
@@ -168,11 +195,15 @@ class PlanBlock {
   final String? weatherBackup;
 
   factory PlanBlock.fromJson(Map<String, dynamic> json) => PlanBlock(
+        id: json['id'] as String? ?? '',
         timeOfDay: timeOfDayFrom(json['time_of_day'] as String?),
+        startTime: json['start_time'] as String?,
+        source: json['source'] as String? ?? 'planner',
+        pinned: json['pinned'] as bool? ?? false,
         activity: json['activity'] as String? ?? '',
         description: json['description'] as String? ?? '',
         location: json['location'] as String? ?? '',
-        estimatedDurationMinutes: json['estimated_duration_minutes'] as num? ?? 0,
+        estimatedDurationMinutes: json['estimated_duration_minutes'] as num?,
         estimatedCostPerPerson: json['estimated_cost_per_person'] as num?,
         suitedForMembers: _strings(json['suited_for_members']),
         optional: json['optional'] as bool? ?? false,

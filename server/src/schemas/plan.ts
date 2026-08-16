@@ -13,7 +13,20 @@ import { z } from 'zod';
  */
 
 export const PaceSchema = z.enum(['packed', 'moderate', 'relaxed']);
-export const TimeOfDaySchema = z.enum(['morning', 'afternoon', 'evening']);
+/**
+ * Which part of the day an activity belongs to.
+ *
+ * The slot is load-bearing, not decorative: short days work by removing slots,
+ * and a plan expressed as clock times could not say "the flight kills the
+ * morning". `anytime` is user-only — the planner is told not to emit it, since
+ * an activity with no part of the day cannot be reasoned about that way.
+ */
+export const TimeOfDaySchema = z.enum([
+  'morning',
+  'afternoon',
+  'evening',
+  'anytime',
+]);
 export const PlanStatusSchema = z.enum(['complete', 'needs_info', 'infeasible']);
 
 /**
@@ -75,15 +88,47 @@ export const ConflictSchema = z.object({
 });
 
 export const BlockSchema = z.object({
+  /**
+   * Stable identity for one activity.
+   *
+   * Everything the editor does — change, move, remove, unpin — names a block,
+   * and an array index is not a name: it changes the moment anything before it
+   * moves. Assigned server-side rather than by the model, which has no reason
+   * to invent unique ids and every reason to repeat them.
+   */
+  id: z.string().default(''),
   time_of_day: TimeOfDaySchema,
   activity: z.string(),
   description: z.string(),
   location: z.string(),
-  estimated_duration_minutes: z.number(),
+  /**
+   * Optional clock time, for display and ordering only.
+   *
+   * Deliberately never feeds the date envelope. The envelope is derived from
+   * flights, and letting a typed "09:00" influence which slots survive would
+   * give two sources of truth for the shape of a day.
+   */
+  start_time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .nullable()
+    .default(null),
+  /** Null when unknown — the card then prints no duration rather than "0m". */
+  estimated_duration_minutes: z.number().nullable(),
   estimated_cost_per_person: z.number().nullable(),
   suited_for_members: z.array(z.string()),
   optional: z.boolean(),
   weather_backup: z.string().nullable(),
+  /** Who wrote it. Drives the `Yours` pill. */
+  source: z.enum(['planner', 'user']).default('planner'),
+  /**
+   * Excluded from replanning. Defaults true for anything a person typed.
+   *
+   * Kept separate from `source` on purpose: unpinning makes a block
+   * replaceable without pretending the user did not write it, so the pill
+   * stays and the planner is freed.
+   */
+  pinned: z.boolean().default(false),
 });
 
 export const DaySchema = z.object({

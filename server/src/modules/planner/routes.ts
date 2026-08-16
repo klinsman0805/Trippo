@@ -3,6 +3,14 @@ import { z } from 'zod';
 import { badRequest, notFound } from '../../lib/errors.js';
 import { getTrip } from '../trips/repo.js';
 import { listAcknowledged, setAcknowledged } from './conflicts.js';
+import {
+  addBlock,
+  moveBlock,
+  pinnedSummary,
+  removeBlock,
+  setPinned,
+  updateBlock,
+} from './blocks.js';
 import { clearFailure, getFailure } from './failure.js';
 import { refine } from './refine.js';
 import { generatePlan, getLatestPlan, getPlan, listPlans } from './service.js';
@@ -138,6 +146,128 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
       plan: record,
       updated_day: updatedDay(req.params.id),
       accepted_conflicts: listAcknowledged(req.params.id),
+    };
+  });
+
+  // --- editing the itinerary by hand ---
+  //
+  // These mutate the latest revision rather than creating a new one. A
+  // revision means "the planner ran", and the Refine thread is derived from
+  // revisions — a new one per typed activity would fill the conversation with
+  // bubbles nobody said.
+
+  const SlotSchema = z.enum(['morning', 'afternoon', 'evening', 'anytime']);
+
+  const BlockBody = z.object({
+    activity: z.string().min(1).max(200),
+    time_of_day: SlotSchema.default('anytime'),
+    description: z.string().max(2_000).default(''),
+    location: z.string().max(300).default(''),
+    /** Optional clock time. Display and ordering only. */
+    start_time: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/, 'Expected HH:MM')
+      .nullish(),
+    estimated_duration_minutes: z.number().int().min(0).max(24 * 60).nullish(),
+    estimated_cost_per_person: z.number().min(0).nullish(),
+    optional: z.boolean().default(false),
+    weather_backup: z.string().max(500).nullish(),
+  });
+
+  app.post<{ Params: { id: string; day: string } }>(
+    '/trips/:id/plan/days/:day/blocks',
+    async (req, reply) => {
+      getTrip(req.params.id);
+      const parsed = BlockBody.safeParse(req.body);
+      if (!parsed.success) {
+        throw badRequest('validation_error', 'Invalid activity', parsed.error.flatten());
+      }
+      const plan = addBlock(req.params.id, Number(req.params.day), parsed.data);
+      reply.code(201);
+      return { plan };
+    },
+  );
+
+  app.patch<{ Params: { id: string; blockId: string } }>(
+    '/trips/:id/plan/blocks/:blockId',
+    async (req) => {
+      getTrip(req.params.id);
+      const parsed = BlockBody.partial().safeParse(req.body);
+      if (!parsed.success) {
+        throw badRequest('validation_error', 'Invalid activity', parsed.error.flatten());
+      }
+      return { plan: updateBlock(req.params.id, req.params.blockId, parsed.data) };
+    },
+  );
+
+  app.delete<{ Params: { id: string; blockId: string } }>(
+    '/trips/:id/plan/blocks/:blockId',
+    async (req) => {
+      getTrip(req.params.id);
+      return { plan: removeBlock(req.params.id, req.params.blockId) };
+    },
+  );
+
+  const MoveBody = z.object({
+    day: z.number().int().min(1),
+    time_of_day: SlotSchema,
+  });
+
+  app.post<{ Params: { id: string; blockId: string } }>(
+    '/trips/:id/plan/blocks/:blockId/move',
+    async (req) => {
+      getTrip(req.params.id);
+      const parsed = MoveBody.safeParse(req.body);
+      if (!parsed.success) {
+        throw badRequest('validation_error', 'Expected { day, time_of_day }', parsed.error.flatten());
+      }
+      return {
+        plan: moveBlock(
+          req.params.id,
+          req.params.blockId,
+          parsed.data.day,
+          parsed.data.time_of_day,
+        ),
+      };
+    },
+  );
+
+  /** Hand one activity back to the planner without deleting it. */
+  app.post<{ Params: { id: string; blockId: string } }>(
+    '/trips/:id/plan/blocks/:blockId/pin',
+    async (req) => {
+      getTrip(req.params.id);
+      const parsed = z.object({ pinned: z.boolean() }).safeParse(req.body);
+      if (!parsed.success) {
+        throw badRequest('validation_error', 'Expected { pinned }', parsed.error.flatten());
+      }
+      return { plan: setPinned(req.params.id, req.params.blockId, parsed.data.pinned) };
+    },
+  );
+
+  /**
+   * What regenerating would keep and what it would replace.
+   *
+   * The design's regenerate sheet states this as fact before the user commits,
+   * so it has to come from the stored plan rather than being guessed at in the
+   * client.
+   */
+  app.get<{ Params: { id: string } }>('/trips/:id/plan/pinned', async (req) => {
+    getTrip(req.params.id);
+    const summary = pinnedSummary(req.params.id);
+    return {
+      pinned: summary.pinned.map(({ day, block }) => ({
+        day,
+        id: block.id,
+        activity: block.activity,
+        time_of_day: block.time_of_day,
+        estimated_cost_per_person: block.estimated_cost_per_person,
+      })),
+      replan_days: summary.replan_days,
+      committed_cost: summary.committed_cost,
+      // The regenerate sheet may only offer "keep mine" when this is true.
+      // It is, because generatePlan re-inserts pinned blocks after the call.
+      honours_pinned: true,
     };
   });
 
