@@ -565,7 +565,7 @@ class _TimeField extends StatelessWidget {
                   border: Border.all(color: WayfareColors.border),
                 ),
                 child: Text(
-                  value ?? 'No set time',
+                  value == null ? 'No set time' : formatClock(value!),
                   style: TextStyle(
                     fontSize: 15,
                     color: value == null

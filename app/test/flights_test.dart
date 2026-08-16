@@ -132,7 +132,7 @@ void main() {
 
       expect(find.text('OUT'), findsOneWidget);
       expect(find.text('BACK'), findsOneWidget);
-      expect(find.text('12:00 → 13:15'), findsOneWidget);
+      expect(find.text('12:00 PM → 1:15 PM'), findsOneWidget);
       expect(find.text('KUL → SIN'), findsOneWidget);
       expect(find.textContaining('1h 15m · non-stop'), findsOneWidget);
       // Carrier code resolved to a name rather than left as "MH".
@@ -220,7 +220,7 @@ void main() {
       expect(find.text('These flights set your dates'), findsOneWidget);
       // The sub-line names both times and says that is the whole trip.
       expect(
-        find.textContaining('lands 13:15 on Saturday'),
+        find.textContaining('lands 1:15 PM on Saturday'),
         findsOneWidget,
       );
       expect(find.textContaining('That is the whole trip'), findsOneWidget);
@@ -326,7 +326,11 @@ void main() {
       );
 
       expect(find.text('SHORT DAY · FLIGHT MH123'), findsOneWidget);
-      expect(find.text('Day 1 runs from 13:15, not the morning.'), findsOneWidget);
+      // The band reads 12-hour; `at` stays 24-hour in the data behind it.
+      expect(
+        find.text('Day 1 runs from 1:15 PM, not the morning.'),
+        findsOneWidget,
+      );
       expect(
         find.textContaining('rather than pretending it exists'),
         findsOneWidget,

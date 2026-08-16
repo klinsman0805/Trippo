@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trippo/design/theme.dart';
+import 'package:trippo/screens/wayfare/formatting.dart';
 import 'package:trippo/screens/wayfare/platform_pickers.dart';
 
 /// One component, two dresses — the rule the rest of the app follows, and the
@@ -33,6 +34,29 @@ Future<void> pumpPicker(
 }
 
 void main() {
+  group('Clock formatting', () {
+    test('renders 24-hour data as 12-hour, including the awkward ends', () {
+      // Midnight and noon are where naive conversions produce "0:00 AM"
+      // and "0:00 PM".
+      expect(formatClock('00:00'), '12:00 AM');
+      expect(formatClock('12:00'), '12:00 PM');
+      expect(formatClock('00:30'), '12:30 AM');
+      expect(formatClock('12:30'), '12:30 PM');
+
+      expect(formatClock('09:05'), '9:05 AM');
+      expect(formatClock('16:55'), '4:55 PM');
+      expect(formatClock('18:45'), '6:45 PM');
+      expect(formatClock('23:59'), '11:59 PM');
+    });
+
+    test('leaves anything it cannot read alone', () {
+      // Better an unconverted string than a confidently wrong time.
+      expect(formatClock(''), '');
+      expect(formatClock('not a time'), 'not a time');
+      expect(formatClock('7'), '7');
+    });
+  });
+
   group('Time picker', () {
     testWidgets('iOS gets the scrolling wheel', (tester) async {
       await pumpPicker(

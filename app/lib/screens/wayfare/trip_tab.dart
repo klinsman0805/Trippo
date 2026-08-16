@@ -596,7 +596,7 @@ class ActivityCard extends StatelessWidget {
         // activity simply sits in its part of the day.
         if (block.startTime != null) ...[
           Text(
-            block.startTime!,
+            formatClock(block.startTime!),
             style: const TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w700,
@@ -824,8 +824,8 @@ class ShortDayBand extends StatelessWidget {
       return 'Day ${short.day} has no usable time.';
     }
     return short.reason == 'late_arrival'
-        ? 'Day ${short.day} runs from ${short.at}, not the morning.'
-        : 'Day ${short.day} ends at ${short.at}.';
+        ? 'Day ${short.day} runs from ${formatClock(short.at)}, not the morning.'
+        : 'Day ${short.day} ends at ${formatClock(short.at)}.';
   }
 }
 

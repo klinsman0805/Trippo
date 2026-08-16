@@ -250,7 +250,7 @@ class DayCountSheet extends StatelessWidget {
                 value: [
                   formatShortDate(envelope!.startDate),
                   if (envelope!.arrivalLocalTime != null)
-                    envelope!.arrivalLocalTime!,
+                    formatClock(envelope!.arrivalLocalTime!),
                 ].join(' · '),
                 color: WayfareColors.ink,
               ),
@@ -259,7 +259,7 @@ class DayCountSheet extends StatelessWidget {
                 value: [
                   formatShortDate(envelope!.endDate),
                   if (envelope!.departureLocalTime != null)
-                    envelope!.departureLocalTime!,
+                    formatClock(envelope!.departureLocalTime!),
                 ].join(' · '),
                 color: WayfareColors.ink,
               ),

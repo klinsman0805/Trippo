@@ -166,7 +166,7 @@ void main() {
         ),
       );
 
-      expect(find.text('19:00'), findsOneWidget);
+      expect(find.text('7:00 PM'), findsOneWidget);
       expect(find.text('EVENING'), findsOneWidget);
     });
 

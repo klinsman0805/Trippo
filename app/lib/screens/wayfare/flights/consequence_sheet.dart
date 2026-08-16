@@ -183,14 +183,22 @@ class _EnvelopeTable extends StatelessWidget {
     final rows = <(String, String)>[
       (
         'Trip starts',
-        [weekdayAndDate('${envelope.startDate}T00:00:00'), envelope.arrivalLocalTime]
+        [
+          weekdayAndDate('${envelope.startDate}T00:00:00'),
+          if (envelope.arrivalLocalTime != null)
+            formatClock(envelope.arrivalLocalTime!),
+        ]
             .whereType<String>()
             .where((s) => s.isNotEmpty)
             .join(' · '),
       ),
       (
         'Trip ends',
-        [weekdayAndDate('${envelope.endDate}T00:00:00'), envelope.departureLocalTime]
+        [
+          weekdayAndDate('${envelope.endDate}T00:00:00'),
+          if (envelope.departureLocalTime != null)
+            formatClock(envelope.departureLocalTime!),
+        ]
             .whereType<String>()
             .where((s) => s.isNotEmpty)
             .join(' · '),

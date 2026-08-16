@@ -141,6 +141,7 @@ function arrivalShortDay(arrival: string, date: string): ShortDay | null {
   if (usable.length === ALL_SLOTS.length) return null;
 
   const at = arrival.slice(11, 16);
+  const shown = clock12(at);
   const isRedEye = minutesOfDay(arrival) < RED_EYE_BEFORE;
 
   return {
@@ -151,11 +152,11 @@ function arrivalShortDay(arrival: string, date: string): ShortDay | null {
     reason: 'late_arrival',
     at,
     note: usable.length === 0
-      ? `The flight lands at ${at}. Day 1 is the transfer and sleep, nothing else.`
+      ? `The flight lands at ${shown}. Day 1 is the transfer and sleep, nothing else.`
       : isRedEye
-        ? `The flight lands at ${at}, so the morning goes to sleeping it off. ` +
+        ? `The flight lands at ${shown}, so the morning goes to sleeping it off. ` +
           `Only the ${usableClause(usable)}.`
-        : `The flight lands at ${at} and the transfer into town takes about an hour. ` +
+        : `The flight lands at ${shown} and the transfer into town takes about an hour. ` +
           `Only the ${usableClause(usable)}.`,
   };
 }
@@ -175,6 +176,8 @@ function sameDayShort(
 
   const from = arrival.slice(11, 16);
   const to = departure.slice(11, 16);
+  const fromShown = clock12(from);
+  const toShown = clock12(to);
 
   return {
     day: 1,
@@ -184,8 +187,8 @@ function sameDayShort(
     reason: 'late_arrival',
     at: from,
     note: usable.length === 0
-      ? `Landing ${from} and leaving ${to} leaves no usable time on the ground.`
-      : `You land at ${from} and leave at ${to}, so only the ` +
+      ? `Landing ${fromShown} and leaving ${toShown} leaves no usable time on the ground.`
+      : `You land at ${fromShown} and leave at ${toShown}, so only the ` +
         `${usableClause(usable)}.`,
   };
 }
@@ -199,6 +202,7 @@ function departureShortDay(
   if (usable.length === ALL_SLOTS.length) return null;
 
   const at = departure.slice(11, 16);
+  const shown = clock12(at);
 
   return {
     day: dayNumber,
@@ -209,10 +213,27 @@ function departureShortDay(
     at,
     note:
       usable.length === 0
-        ? `A ${at} departure means leaving for the airport before the day starts. ` +
+        ? `A ${shown} departure means leaving for the airport before the day starts. ` +
           `This day is packing and the transfer, nothing else.`
-        : `A ${at} departure ends the day early. Only the ${usableClause(usable)}.`,
+        : `A ${shown} departure ends the day early. Only the ${usableClause(usable)}.`,
   };
+}
+
+/**
+ * `18:45` → `6:45 PM`.
+ *
+ * Only for the user-facing `note`. The `at` field stays 24-hour, because it is
+ * data the client formats for itself — and the planner instructions below stay
+ * 24-hour too, where an unambiguous time matters more than a familiar one.
+ */
+function clock12(hhmm: string): string {
+  const [rawHour, rawMinute] = hhmm.split(':');
+  const hour = Number(rawHour);
+  if (!Number.isFinite(hour) || rawMinute === undefined) return hhmm;
+  const suffix = hour < 12 ? 'AM' : 'PM';
+  // Midnight is 12 AM and noon is 12 PM; neither is "0".
+  const display = hour % 12 === 0 ? 12 : hour % 12;
+  return `${display}:${rawMinute} ${suffix}`;
 }
 
 const minutesOfDay = (iso: string): number =>

@@ -342,6 +342,14 @@ The lookup returns **every departure that number makes that day**, not one. A
 number can fly twice, and even when it doesn't, showing the times back is how
 the traveller confirms they picked the right date before it becomes their trip.
 
+**Times are stored 24-hour and shown 12-hour.** One canonical form underneath
+means nothing that sorts or compares them — the within-slot order, the date
+envelope, the API — ever parses an AM/PM string; `formatClock` is the only
+place the two meet. The server formats its own user-facing prose (the
+short-day notes) the same way, while `short_day.at` stays 24-hour because it
+is data the client formats for itself. Planner instructions stay 24-hour too:
+for a model, unambiguous beats familiar.
+
 **Times stay local to their own airport and are never converted.** AK892 leaving
 KUL at 16:55 (GMT+8) and the way home leaving at 18:45 (GMT+7) both read as the
 boarding pass does. Converting to one zone would make the screen disagree with

@@ -98,9 +98,31 @@ String destinationsSubtitle(
   return [route, dates].where((s) => s.isNotEmpty).join(' · ');
 }
 
-/// `2026-09-12T13:15:00` → `13:15`. Flight times are local to their airport,
-/// so they are read straight off the string rather than parsed into a zone.
-String timeOf(String iso) => iso.length >= 16 ? iso.substring(11, 16) : '';
+/// `2026-09-12T13:15:00` → `1:15 PM`.
+///
+/// Flight times are local to their own airport, so the clock part is read
+/// straight off the string rather than parsed into a zone — converting is what
+/// would make a departure disagree with the boarding pass.
+String timeOf(String iso) =>
+    iso.length >= 16 ? formatClock(iso.substring(11, 16)) : '';
+
+/// `18:45` → `6:45 PM`.
+///
+/// Times are stored 24-hour and shown 12-hour: one canonical form underneath
+/// means nothing that sorts or compares them has to parse an AM/PM string,
+/// and the reader still gets the format they think in.
+String formatClock(String hhmm) {
+  final parts = hhmm.split(':');
+  if (parts.length < 2) return hhmm;
+  final hour = int.tryParse(parts[0]);
+  final minute = parts[1].padLeft(2, '0');
+  if (hour == null) return hhmm;
+
+  final suffix = hour < 12 ? 'AM' : 'PM';
+  // 0 and 12 both display as 12 — midnight is 12 AM, noon is 12 PM.
+  final display = hour % 12 == 0 ? 12 : hour % 12;
+  return '$display:$minute $suffix';
+}
 
 /// `Sat 12 Sep`
 String weekdayAndDate(String iso) {

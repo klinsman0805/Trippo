@@ -254,7 +254,7 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
                 border: Border.all(color: WayfareColors.border),
               ),
               child: Text(
-                value ?? '--:--',
+                value == null ? '--:--' : formatClock(value),
                 style: TextStyle(
                   fontSize: 15,
                   color: value == null

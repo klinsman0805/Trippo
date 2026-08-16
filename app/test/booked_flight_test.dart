@@ -231,7 +231,7 @@ void main() {
     expect(lookups.single['direction'], 'outbound');
 
     expect(find.textContaining('only AK892 that day'), findsOneWidget);
-    expect(find.text('16:55 → 18:05'), findsOneWidget);
+    expect(find.text('4:55 PM → 6:05 PM'), findsOneWidget);
     expect(find.textContaining('KUL → BKK'), findsOneWidget);
     // Nothing has been committed by looking.
     expect(selections, isEmpty);
@@ -244,8 +244,8 @@ void main() {
     await pickDate(tester);
 
     expect(find.textContaining('AK892 flies 2 times that day'), findsOneWidget);
-    expect(find.text('16:55 → 18:05'), findsOneWidget);
-    expect(find.text('23:40 → 02:35'), findsOneWidget);
+    expect(find.text('4:55 PM → 6:05 PM'), findsOneWidget);
+    expect(find.text('11:40 PM → 2:35 AM'), findsOneWidget);
     // A landing on the next day changes which day the trip starts, so it says so.
     expect(find.text('+1 day'), findsOneWidget);
   });
@@ -255,7 +255,7 @@ void main() {
     await pump(tester, api());
     await findFlight(tester, 'AK892');
     await pickDate(tester);
-    await tapDown(tester, find.text('16:55 → 18:05'));
+    await tapDown(tester, find.text('4:55 PM → 6:05 PM'));
 
     expect(find.text('Flying back?'), findsOneWidget);
     expect(find.textContaining('Skip it if this is one way'), findsOneWidget);
@@ -269,7 +269,7 @@ void main() {
     await pump(tester, api());
     await findFlight(tester, 'AK892');
     await pickDate(tester);
-    await tapDown(tester, find.text('16:55 → 18:05'));
+    await tapDown(tester, find.text('4:55 PM → 6:05 PM'));
     await tapDown(tester, find.text('Skip for now'));
 
     expect(find.text('Use these dates'), findsOneWidget);
@@ -290,7 +290,7 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
 
     await pickDate(tester);
-    await tapDown(tester, find.text('16:55 → 18:05'));
+    await tapDown(tester, find.text('4:55 PM → 6:05 PM'));
 
     // Now the question appears, with the field inside it rather than pointing
     // back up the screen at a box that was already there.
@@ -322,9 +322,9 @@ void main() {
 
     expect(lookups.last['direction'], 'return');
     // The return's own local time, not converted into the outbound's zone.
-    expect(find.text('18:45 → 21:50'), findsOneWidget);
+    expect(find.text('6:45 PM → 9:50 PM'), findsOneWidget);
 
-    await tapDown(tester, find.text('18:45 → 21:50'));
+    await tapDown(tester, find.text('6:45 PM → 9:50 PM'));
     await tapDown(tester, find.text('Use these dates'));
 
     expect(selections.map((s) => s['direction']), ['outbound', 'return']);
@@ -370,7 +370,7 @@ void main() {
     await pump(tester, api());
     await findFlight(tester, 'AK892');
     await pickDate(tester);
-    await tapDown(tester, find.text('16:55 → 18:05'));
+    await tapDown(tester, find.text('4:55 PM → 6:05 PM'));
 
     expect(find.text('Change'), findsOneWidget);
     await tapDown(tester, find.text('Change'));
