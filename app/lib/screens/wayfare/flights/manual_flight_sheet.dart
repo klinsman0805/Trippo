@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart' hide TimeOfDay;
-import 'package:flutter/material.dart' as m show TimeOfDay, showTimePicker;
 import 'package:flutter/services.dart';
 
 import '../../../api/api_client.dart';
@@ -8,6 +7,7 @@ import '../../../design/theme.dart';
 import '../../../design/tokens.dart';
 import '../../../design/widgets.dart';
 import '../formatting.dart';
+import '../platform_pickers.dart';
 
 /// The flight, as the traveller reads it off their booking.
 ///
@@ -40,8 +40,9 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
   final _from = TextEditingController();
   final _to = TextEditingController();
 
-  m.TimeOfDay? _departs;
-  m.TimeOfDay? _arrives;
+  /// `HH:MM`, local to their own airport.
+  String? _departs;
+  String? _arrives;
 
   /// Landing after midnight is common on evening flights, and it changes which
   /// day the trip starts — so it is asked rather than inferred.
@@ -222,8 +223,8 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
 
   Widget _timeField(
     String label,
-    m.TimeOfDay? value,
-    ValueChanged<m.TimeOfDay> onPick,
+    String? value,
+    ValueChanged<String> onPick,
   ) {
     final theme = WayfareTheme.of(context);
 
@@ -237,10 +238,7 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
           child: InkWell(
             borderRadius: theme.card,
             onTap: () async {
-              final picked = await m.showTimePicker(
-                context: context,
-                initialTime: value ?? const m.TimeOfDay(hour: 9, minute: 0),
-              );
+              final picked = await pickWayfareTime(context, initial: value);
               if (picked != null) onPick(picked);
             },
             child: Container(
@@ -252,7 +250,7 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
                 border: Border.all(color: WayfareColors.border),
               ),
               child: Text(
-                value == null ? '--:--' : _hhmm(value),
+                value ?? '--:--',
                 style: TextStyle(
                   fontSize: 15,
                   color: value == null
@@ -309,9 +307,6 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
         ),
       );
 
-  static String _hhmm(m.TimeOfDay t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-
   static String _isoDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
@@ -331,8 +326,8 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
         flightNumber: widget.flightNumber,
         origin: _from.text.trim().toUpperCase(),
         destination: _to.text.trim().toUpperCase(),
-        departsAt: '${_isoDate(widget.date)}T${_hhmm(_departs!)}',
-        arrivesAt: '${_isoDate(arrivalDate)}T${_hhmm(_arrives!)}',
+        departsAt: '${_isoDate(widget.date)}T$_departs',
+        arrivesAt: '${_isoDate(arrivalDate)}T$_arrives',
         direction: widget.direction,
       );
       if (mounted) Navigator.of(context).pop(offer);

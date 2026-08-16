@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -11,6 +10,7 @@ import '../../../models/flight.dart';
 import '../../../models/trip.dart';
 import '../formatting.dart';
 import '../pushed_screen.dart';
+import '../platform_pickers.dart';
 import 'manual_flight_sheet.dart';
 
 /// "I've already booked" — the shortest path to a dated trip.
@@ -405,76 +405,15 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
     );
   }
 
-  /// The platform's own picker: the scrolling wheel on iOS, the Material
-  /// calendar on Android. A custom one would be a worse version of both.
   Future<void> _openDatePicker(BuildContext context, _Leg leg) async {
-    final theme = WayfareTheme.of(context);
     final earliest = leg == _Leg.back ? _earliestReturn : DateTime(2020);
-    final initial = (leg == _Leg.back ? _returnDate : _outboundDate) ??
-        (leg == _Leg.back ? _earliestReturn : _today);
-    final last = DateTime(DateTime.now().year + 2, 12, 31);
-
-    if (theme.isAndroid) {
-      final picked = await showDatePicker(
-        context: context,
-        initialDate: initial.isBefore(earliest) ? earliest : initial,
-        firstDate: earliest,
-        lastDate: last,
-      );
-      if (picked != null) _pickDate(leg, picked);
-      return;
-    }
-
-    var draft = initial.isBefore(earliest) ? earliest : initial;
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: WayfareColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(theme.sheetRadius)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(sheetContext).pop(false),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: WayfareColors.mutedLight),
-                  ),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => Navigator.of(sheetContext).pop(true),
-                  child: const Text(
-                    'Done',
-                    style: TextStyle(
-                      color: WayfareColors.accent,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(
-              height: 240,
-              child: CupertinoDatePicker(
-                mode: CupertinoDatePickerMode.date,
-                initialDateTime: draft,
-                minimumDate: earliest,
-                maximumDate: last,
-                onDateTimeChanged: (d) => draft = DateTime(d.year, d.month, d.day),
-              ),
-            ),
-          ],
-        ),
-      ),
+    final picked = await pickWayfareDate(
+      context,
+      initial: leg == _Leg.back ? _returnDate : _outboundDate,
+      first: earliest,
+      last: DateTime(DateTime.now().year + 2, 12, 31),
     );
-
-    if (confirmed ?? false) _pickDate(leg, draft);
+    if (picked != null) _pickDate(leg, picked);
   }
 
   void _pickDate(_Leg leg, DateTime date) {

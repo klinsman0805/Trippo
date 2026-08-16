@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart' hide TimeOfDay;
-import 'package:flutter/material.dart' as m show TimeOfDay, showTimePicker;
 
 import '../../../design/theme.dart';
 import '../../../design/tokens.dart';
 import '../../../design/widgets.dart';
 import '../../../models/plan.dart';
 import '../formatting.dart';
+import '../platform_pickers.dart';
 
 /// Adding or editing one activity — the same sheet either way.
 ///
@@ -549,22 +549,8 @@ class _TimeField extends StatelessWidget {
             child: InkWell(
               borderRadius: theme.card,
               onTap: () async {
-                final parts = value?.split(':');
-                final picked = await m.showTimePicker(
-                  context: context,
-                  initialTime: parts == null
-                      ? const m.TimeOfDay(hour: 9, minute: 0)
-                      : m.TimeOfDay(
-                          hour: int.tryParse(parts[0]) ?? 9,
-                          minute: int.tryParse(parts[1]) ?? 0,
-                        ),
-                );
-                if (picked != null) {
-                  onChanged(
-                    '${picked.hour.toString().padLeft(2, '0')}:'
-                    '${picked.minute.toString().padLeft(2, '0')}',
-                  );
-                }
+                final picked = await pickWayfareTime(context, initial: value);
+                if (picked != null) onChanged(picked);
               },
               child: Container(
                 constraints: const BoxConstraints(minHeight: WayfareTouch.input),

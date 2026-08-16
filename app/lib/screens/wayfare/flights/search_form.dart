@@ -6,6 +6,7 @@ import '../../../design/widgets.dart';
 import '../../../models/flight.dart';
 import '../../../state/flights_controller.dart';
 import '../formatting.dart';
+import '../platform_pickers.dart';
 
 /// The flight search query: route and dates, then who and how.
 class FlightSearchForm extends StatefulWidget {
@@ -70,11 +71,11 @@ class _FlightSearchFormState extends State<FlightSearchForm> {
         ? DateTime.parse(c.departureDate!)
         : now;
 
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: firstAllowed,
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 365)),
+    final picked = await pickWayfareDate(
+      context,
+      initial: firstAllowed,
+      first: now,
+      last: now.add(const Duration(days: 365)),
     );
     if (picked == null) return;
 
