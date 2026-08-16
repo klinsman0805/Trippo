@@ -253,7 +253,7 @@ class _TripTile extends StatelessWidget {
                 width: 44,
                 height: 44,
                 child: IconButton(
-                  onPressed: onDelete,
+                  onPressed: () => _confirmDelete(context),
                   tooltip: 'Delete ${trip.title}',
                   icon: const Icon(
                     Icons.delete_outline,
@@ -268,6 +268,36 @@ class _TripTile extends StatelessWidget {
       ),
     );
   }
+
+  /// Deleting a trip cascades on the server — members, imported sources and
+  /// their places, flight selections and every plan revision go with it. That
+  /// is far more than the one row the icon sits next to, so the dialog says so
+  /// rather than asking a bare "are you sure?".
+  Future<void> _confirmDelete(BuildContext context) async {
+    final losses = [
+      if (trip.memberCount > 0)
+        '${trip.memberCount} '
+            "${trip.memberCount == 1 ? "traveller's" : "travellers'"} "
+            'preferences',
+      'every plan it has produced',
+      'anything imported into it',
+    ];
+
+    final confirmed = await confirmDestructive(
+      context,
+      title: 'Delete ${trip.title}?',
+      body: 'This takes ${_readableList(losses)} with it, and cannot be undone.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep it',
+    );
+
+    if (confirmed) onDelete();
+  }
+
+  static String _readableList(List<String> items) {
+    if (items.length == 1) return items.first;
+    return '${items.sublist(0, items.length - 1).join(', ')} and ${items.last}';
+  }
 }
 
 /// Names any integration the server has no key for, so a disabled feature
@@ -281,9 +311,12 @@ class _FeatureNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = WayfareTheme.of(context);
     final warnings = <String>[
-      if (!repo.plannerAvailable) 'Planning is off — no ANTHROPIC_API_KEY set',
+      // Name the key the server actually reads. This said ANTHROPIC_API_KEY
+      // long after the planner moved to Gemini, which would send anyone
+      // troubleshooting to a variable that does nothing.
+      if (!repo.plannerAvailable) 'Planning is off — no GEMINI_API_KEY set',
       if (!repo.mapsAvailable)
-        'Maps and transit are off — no GOOGLE_MAPS_API_KEY set',
+        'Maps and transit are off — MAPS_PROVIDER is google with no key set',
       if (repo.flightsAreEstimatesOnly) 'Flight prices are mock estimates',
     ];
     if (warnings.isEmpty) return const SizedBox.shrink();

@@ -398,36 +398,16 @@ class _RemoveButton extends StatelessWidget {
   }
 
   Future<void> _confirm(BuildContext context, String first) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: WayfareColors.surface,
-        title: Text('Remove $first?', style: WayfareType.display(20)),
-        content: Text(
-          "Their preferences go with them, and the planner will have one "
+    final confirmed = await confirmDestructive(
+      context,
+      title: 'Remove $first?',
+      body: 'Their preferences go with them, and the planner will have one '
           'less person to balance. The itinerary stays until you regenerate it.',
-          style: WayfareType.body(13.5, color: WayfareColors.subhead),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text(
-              'Keep them',
-              style: TextStyle(color: WayfareColors.inkSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Remove',
-              style: TextStyle(color: WayfareColors.destructiveInk),
-            ),
-          ),
-        ],
-      ),
+      confirmLabel: 'Remove',
+      cancelLabel: 'Keep them',
     );
 
-    if (confirmed ?? false) onRemove();
+    if (confirmed) onRemove();
   }
 }
 

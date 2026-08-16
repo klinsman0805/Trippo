@@ -3,6 +3,49 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'tokens.dart';
 
+/// Ask before something irreversible happens.
+///
+/// Destructive actions in this app are *named* rather than labelled "Delete",
+/// and they never get a red fill — the weight is carried by the copy, which
+/// has to say what actually goes. Returns false if dismissed by tapping away,
+/// so the safe answer is the default in every path.
+Future<bool> confirmDestructive(
+  BuildContext context, {
+  required String title,
+  required String body,
+  required String confirmLabel,
+  required String cancelLabel,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: WayfareColors.surface,
+      title: Text(title, style: WayfareType.display(20)),
+      content: Text(
+        body,
+        style: WayfareType.body(13.5, color: WayfareColors.subhead),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: Text(
+            cancelLabel,
+            style: const TextStyle(color: WayfareColors.inkSecondary),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: Text(
+            confirmLabel,
+            style: const TextStyle(color: WayfareColors.destructiveInk),
+          ),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
+}
+
 /// A 999-radius pill with a border — the OPTIONAL badge, conflict tags, pace
 /// chips. Sizes vary per use, so they're parameters rather than variants.
 class WayfarePill extends StatelessWidget {
