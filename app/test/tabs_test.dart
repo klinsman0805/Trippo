@@ -5,6 +5,7 @@ import 'package:trippo/api/trippo_api.dart';
 import 'package:trippo/design/theme.dart';
 import 'package:trippo/design/tokens.dart';
 import 'package:trippo/design/widgets.dart';
+import 'package:trippo/models/flight.dart';
 import 'package:trippo/models/plan.dart';
 import 'package:trippo/models/trip.dart';
 import 'package:trippo/screens/wayfare/budget_tab.dart';
@@ -167,7 +168,43 @@ Plan samplePlan({bool overBudget = true}) => Plan.fromJson({
       'clarifying_questions': <String>[],
     });
 
+/// Which flight a short day blames.
+///
+/// A day cut short at the start is the arriving flight's doing; one cut short
+/// at the end is the departing flight's. Labelling both with the outbound
+/// number told the user the wrong aircraft ended their last day.
+void _shortDayLabels() {
+  test('a short day names the flight that actually caused it', () {
+    final controller = buildController();
+    controller.outboundFlightLabel = 'Flight AK892';
+    controller.returnFlightLabel = 'Flight AK893';
+
+    final arrival = ShortDay.fromJson(const {
+      'day': 1,
+      'date': '2026-09-26',
+      'usable_slots': ['evening'],
+      'lost_slots': ['morning', 'afternoon'],
+      'reason': 'late_arrival',
+      'at': '18:10',
+      'note': '',
+    });
+    final departure = ShortDay.fromJson(const {
+      'day': 5,
+      'date': '2026-09-30',
+      'usable_slots': ['morning', 'afternoon'],
+      'lost_slots': ['evening'],
+      'reason': 'early_departure',
+      'at': '18:45',
+      'note': '',
+    });
+
+    expect(controller.flightLabelFor(arrival), 'Flight AK892');
+    expect(controller.flightLabelFor(departure), 'Flight AK893');
+  });
+}
+
 void main() {
+  _shortDayLabels();
   group('Trip tab', () {
     testWidgets('renders day chips, costs and the optional badge',
         (tester) async {
@@ -179,6 +216,7 @@ void main() {
           controller: controller,
           onAddActivity: (_) {},
           onEditActivity: (_) {},
+          onRemoveActivity: (_) {},
           onMoveActivity: (_) {},
           onChangeDayCount: () {},
         ));
@@ -202,6 +240,7 @@ void main() {
           controller: controller,
           onAddActivity: (_) {},
           onEditActivity: (_) {},
+          onRemoveActivity: (_) {},
           onMoveActivity: (_) {},
           onChangeDayCount: () {},
         ));
@@ -221,6 +260,7 @@ void main() {
           controller: controller,
           onAddActivity: (_) {},
           onEditActivity: (_) {},
+          onRemoveActivity: (_) {},
           onMoveActivity: (_) {},
           onChangeDayCount: () {},
         ));
@@ -241,6 +281,7 @@ void main() {
           controller: controller,
           onAddActivity: (_) {},
           onEditActivity: (_) {},
+          onRemoveActivity: (_) {},
           onMoveActivity: (_) {},
           onChangeDayCount: () {},
         ));

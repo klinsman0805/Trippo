@@ -515,6 +515,7 @@ void main() {
           controller: controller,
           onAddActivity: (_) {},
           onEditActivity: (_) {},
+          onRemoveActivity: (_) {},
           onMoveActivity: (_) {},
           onChangeDayCount: () {},
         );
@@ -617,6 +618,54 @@ void main() {
 
       expect(find.byType(ReorderGrip), findsNothing);
       expect(find.byType(ReorderableListView), findsNothing);
+    });
+  });
+
+  group('Swipe actions', () {
+    testWidgets('a swipe reveals edit and delete, and neither fires on a tap',
+        (tester) async {
+      var edits = 0;
+      var deletes = 0;
+
+      await pump(
+        tester,
+        SwipeableActivity(
+          onEdit: () => edits++,
+          onDelete: () => deletes++,
+          child: ActivityCard(
+            block: block(),
+            members: const [],
+            currency: 'MYR',
+          ),
+        ),
+      );
+
+      // Reading stays risk-free: the actions sit behind the card, so nothing
+      // is reachable until the card is deliberately moved off them.
+      await tester.tap(find.text('Delete'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(edits, 0);
+      expect(deletes, 0);
+
+      await tester.drag(
+        find.byType(ActivityCard),
+        const Offset(-200, 0),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(
+        deletes,
+        1,
+        reason: 'delete opens the confirmation; it does not remove anything',
+      );
+
+      await tester.drag(find.byType(ActivityCard), const Offset(-200, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+      expect(edits, 1);
     });
   });
 

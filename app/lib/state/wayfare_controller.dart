@@ -39,8 +39,18 @@ class WayfareController extends ChangeNotifier {
   /// Trip tab — which days lost slots, and why.
   DateEnvelope? dateEnvelope;
 
-  /// Flight number for the short-day band's eyebrow, e.g. "Flight MH123".
-  String? flightLabel;
+  /// Flight numbers behind the short days, by direction.
+  ///
+  /// A day cut short at the start is the arriving flight's doing; one cut
+  /// short at the end is the departing flight's. Labelling both with the
+  /// outbound number — as this did — told the user the wrong aircraft was
+  /// ending their last day.
+  String? outboundFlightLabel;
+  String? returnFlightLabel;
+
+  /// Which flight shortened this particular day.
+  String? flightLabelFor(ShortDay short) =>
+      short.reason == 'early_departure' ? returnFlightLabel : outboundFlightLabel;
 
   /// Opens the Flights screen from a short-day band. Wired by the shell,
   /// which owns navigation.
@@ -162,7 +172,8 @@ class WayfareController extends ChangeNotifier {
 
       final flights = await _api.tripFlights(tripId);
       dateEnvelope = flights.envelope;
-      flightLabel = _flightLabelFrom(flights.selections);
+      outboundFlightLabel = _flightLabelFrom(flights.selections, 'outbound');
+      returnFlightLabel = _flightLabelFrom(flights.selections, 'return');
 
       _clampSelectedDay();
       error = null;
@@ -620,16 +631,19 @@ class WayfareController extends ChangeNotifier {
       send('About the ${conflict.tag.toLowerCase()} issue — '
           '${conflict.description} Can you adjust the plan for that?');
 
-  /// "Flight MH123" from the stored outbound selection, when there is one.
-  static String? _flightLabelFrom(List<Map<String, dynamic>> selections) {
+  /// "Flight AK893" from the stored selection going the given way.
+  static String? _flightLabelFrom(
+    List<Map<String, dynamic>> selections,
+    String direction,
+  ) {
     for (final selection in selections) {
       final offer = selection['offer'] as Map<String, dynamic>?;
       final itineraries = offer?['itineraries'] as List?;
-      final outbound = itineraries?.firstWhere(
-        (i) => (i as Map)['direction'] == 'outbound',
+      final match = itineraries?.firstWhere(
+        (i) => (i as Map)['direction'] == direction,
         orElse: () => null,
       );
-      final segments = (outbound as Map?)?['segments'] as List?;
+      final segments = (match as Map?)?['segments'] as List?;
       final number = (segments?.firstOrNull as Map?)?['flight_number'] as String?;
       if (number != null && number.isNotEmpty) return 'Flight $number';
     }

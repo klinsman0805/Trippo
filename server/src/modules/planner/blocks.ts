@@ -104,6 +104,74 @@ export function createBlankPlan(tripId: string): PlanRecord {
   return getLatestPlan(tripId)!;
 }
 
+/**
+ * Make the itinerary's days match the trip's dates.
+ *
+ * Changing flights changes how long the trip is, and the stored plan does not
+ * know that. Shortening 26–30 Sep to 26–29 left a day 5 on screen that no
+ * longer existed. Days are added empty and removed from the end, and anything
+ * planned on a day that survives is untouched.
+ *
+ * Returns null when nothing needed doing, so callers can avoid a pointless
+ * write.
+ */
+export function reconcileDays(tripId: string): Plan | null {
+  const record = getLatestPlan(tripId);
+  if (!record) return null;
+
+  const trip = getTrip(tripId);
+  const dates = daysBetween(trip.start_date, trip.end_date);
+  const plan = record.plan;
+  ensureBlockIds(plan);
+
+  const wanted = dates.length;
+  const have = plan.itinerary.length;
+  // No dates on the trip means nothing to reconcile against — a hand-built
+  // plan with its own days must not be truncated to one.
+  if (!trip.start_date || !trip.end_date) return null;
+
+  let changed = false;
+
+  if (have > wanted) {
+    // Trimmed from the end, which is where the removed days are: a shorter
+    // return moves the last day, never the first.
+    plan.itinerary = plan.itinerary.slice(0, wanted);
+    changed = true;
+  } else if (have < wanted) {
+    for (let day = have + 1; day <= wanted; day++) {
+      plan.itinerary.push({
+        day,
+        date: dates[day - 1] ?? null,
+        location: trip.destinations[0] ?? '',
+        lodging_area_suggestion: null,
+        blocks: [],
+        notes: null,
+      });
+    }
+    changed = true;
+  }
+
+  // Dates shift even when the count does not — a flight moved a day later
+  // keeps five days but renumbers all of them.
+  plan.itinerary.forEach((day, i) => {
+    const date = dates[i] ?? null;
+    if (day.date !== date) {
+      day.date = date;
+      changed = true;
+    }
+    if (day.day !== i + 1) {
+      day.day = i + 1;
+      changed = true;
+    }
+  });
+
+  if (!changed) return null;
+  plan.trip.start_date = trip.start_date;
+  plan.trip.end_date = trip.end_date;
+  plan.trip.duration_days = wanted;
+  return persist(record, plan);
+}
+
 /** Inclusive list of ISO dates, or a single unnamed day when there are none. */
 function daysBetween(start: string | null, end: string | null): (string | null)[] {
   if (!start || !end) return [null];

@@ -78,8 +78,12 @@ class SheetFrame extends StatelessWidget {
     final theme = WayfareTheme.of(context);
     final viewInsets = MediaQuery.viewInsetsOf(context).bottom;
 
-    return Align(
-      alignment: Alignment.bottomCenter,
+    // No Align: showModalBottomSheet already docks this to the bottom, and
+    // filling the screen meant every tap above the card landed on a
+    // transparent area instead of the barrier — leaving no way out but the
+    // buttons.
+    return SafeArea(
+      top: false,
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.9,

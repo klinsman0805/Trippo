@@ -10,6 +10,7 @@ import {
   saveSelection,
 } from './index.js';
 import { deriveTripEnvelope } from './envelope.js';
+import { reconcileDays } from '../planner/blocks.js';
 import { FlightLookupSchema, FlightSearchSchema, type FlightOffer } from './types.js';
 
 /**
@@ -231,6 +232,9 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
         end_date: envelope.end_date,
         date_flexible: false,
       });
+      // And the itinerary has to follow. Changing 26–30 Sep to 26–29 left a
+      // day 5 on screen that the trip no longer had.
+      reconcileDays(req.params.id);
     }
 
     reply.code(201);

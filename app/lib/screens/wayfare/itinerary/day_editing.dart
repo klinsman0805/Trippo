@@ -345,6 +345,178 @@ class OpenSlotLine extends StatelessWidget {
   }
 }
 
+/// An activity card you can swipe left to act on.
+///
+/// Reading stays risk-free — nothing happens on a tap or a scroll — but the
+/// two things people do most often are one gesture away instead of behind a
+/// mode. Edit mode still exists for reordering and moving between days, which
+/// a swipe cannot express.
+class SwipeableActivity extends StatelessWidget {
+  const SwipeableActivity({
+    super.key,
+    required this.child,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final Widget child;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = WayfareTheme.of(context);
+
+    return ClipRRect(
+      borderRadius: theme.card,
+      child: Slidable(
+        endActions: [
+          _SlidableAction(
+            label: 'Edit',
+            icon: Icons.edit_outlined,
+            background: WayfareColors.writtenBg,
+            foreground: WayfareColors.writtenInk,
+            onTap: onEdit,
+          ),
+          _SlidableAction(
+            label: 'Delete',
+            icon: Icons.delete_outline,
+            background: WayfareColors.overBg,
+            foreground: WayfareColors.destructiveInk,
+            onTap: onDelete,
+          ),
+        ],
+        child: child,
+      ),
+    );
+  }
+}
+
+/// One revealed action. Sized to the tap-target minimum in both dresses.
+class _SlidableAction extends StatelessWidget {
+  const _SlidableAction({
+    required this.label,
+    required this.icon,
+    required this.background,
+    required this.foreground,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color background;
+  final Color foreground;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: background,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: 80,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 20, color: foreground),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: foreground,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Minimal swipe-to-reveal, rather than a package for one gesture.
+///
+/// Deliberately not [Dismissible]: a swipe here reveals a choice, it does not
+/// itself delete. Removing an activity goes through the confirmation that
+/// names what the day loses, same as everywhere else.
+class Slidable extends StatefulWidget {
+  const Slidable({super.key, required this.child, required this.endActions});
+
+  final Widget child;
+  final List<Widget> endActions;
+
+  @override
+  State<Slidable> createState() => _SlidableState();
+}
+
+class _SlidableState extends State<Slidable>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 180),
+  );
+
+  double get _actionsWidth => widget.endActions.length * 80.0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _close() => _controller.reverse();
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragUpdate: (d) {
+        _controller.value -= d.primaryDelta! / _actionsWidth;
+      },
+      onHorizontalDragEnd: (d) {
+        // Fling or past halfway opens; anything less springs back, so a
+        // stray horizontal scroll never leaves actions hanging out.
+        final flung = d.velocity.pixelsPerSecond.dx < -300;
+        if (flung || _controller.value > 0.5) {
+          _controller.forward();
+        } else {
+          _controller.reverse();
+        }
+      },
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final offset = _controller.value * _actionsWidth;
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    for (final action in widget.endActions)
+                      GestureDetector(
+                        onTap: _close,
+                        behavior: HitTestBehavior.translucent,
+                        child: action,
+                      ),
+                  ],
+                ),
+              ),
+              Transform.translate(
+                offset: Offset(-offset, 0),
+                child: child,
+              ),
+            ],
+          );
+        },
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 /// The reorder grip, for moving a card within its own slot.
 ///
 /// Ordering across slots is not the user's to set — the slot decides that — so

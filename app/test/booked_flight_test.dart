@@ -280,15 +280,27 @@ void main() {
     expect((selections.single['offer'] as Map)['booked'], isTrue);
   });
 
-  testWidgets('a return leg is dated separately and cannot precede the outbound',
+  testWidgets('the return is asked for only once the outbound is settled',
       (tester) async {
     await pump(tester, api());
-    await findFlight(tester, 'AK892', back: 'AK893');
+    await findFlight(tester, 'AK892');
+
+    // One boarding pass at a time: no return field until the outbound is done.
+    expect(find.text('Flying back?'), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
+
     await pickDate(tester);
     await tapDown(tester, find.text('16:55 → 18:05'));
 
-    // Having typed a return number, the prompt is skipped for its date step.
-    expect(find.text('Flying back?'), findsNothing);
+    // Now the question appears, with the field inside it rather than pointing
+    // back up the screen at a box that was already there.
+    expect(find.text('Flying back?'), findsOneWidget);
+    expect(find.text('Skip for now'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).last, 'AK893');
+    await tester.pumpAndSettle();
+    await tapDown(tester, find.text('Find the return flight'));
+
     expect(find.text('When does AK893 take off?'), findsOneWidget);
     expect(
       find.textContaining('is closed off'),

@@ -260,21 +260,17 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
             style: WayfareType.body(13, color: WayfareColors.subhead),
           ),
           const SizedBox(height: 14),
+          // Only the outbound, until it is chosen. Asking for the return at
+          // the same time makes a two-field form out of a one-field question,
+          // and most people are reading one boarding pass at a time.
           _numberField(
             label: 'Getting there',
             controller: _outboundNumber,
             enabled: _outbound == null,
           ),
-          const SizedBox(height: 12),
-          _numberField(
-            label: 'Coming back',
-            controller: _returnNumber,
-            optional: true,
-            enabled: _back == null,
-          ),
           const SizedBox(height: 16),
           WayfarePrimaryButton(
-            label: 'Find my flight',
+            label: _outbound == null ? 'Find my flight' : 'Find it again',
             onPressed: _typedOutbound.isEmpty ? null : _findMyFlight,
           ),
         ],
@@ -304,14 +300,6 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
         _returnSettled = false;
       }
 
-      final typedReturn = _typedReturn;
-      if (typedReturn != _confirmedReturn) {
-        _confirmedReturn = typedReturn.isEmpty ? null : typedReturn;
-        _returnDate = null;
-        _back = null;
-        // A return number typed after skipping means they changed their mind.
-        if (typedReturn.isNotEmpty) _returnSettled = false;
-      }
     });
   }
 
@@ -406,7 +394,10 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
   }
 
   Future<void> _openDatePicker(BuildContext context, _Leg leg) async {
-    final earliest = leg == _Leg.back ? _earliestReturn : DateTime(2020);
+    // Today is the floor: this is a planning app, so a flight that has already
+    // gone is not a date anyone is reaching for, and the wheel opening on
+    // yesterday made it look like it had defaulted to the wrong day.
+    final earliest = leg == _Leg.back ? _earliestReturn : _today;
     final picked = await pickWayfareDate(
       context,
       initial: leg == _Leg.back ? _returnDate : _outboundDate,
@@ -489,6 +480,11 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
 
   // --- step 9: the return prompt ---
 
+  /// The return leg, asked only once the outbound is settled.
+  ///
+  /// The field lives here rather than above, so the question and the place to
+  /// answer it are the same thing — the old copy pointed back up the screen to
+  /// a box that had been sitting there unexplained the whole time.
   Widget _returnPrompt(BuildContext context) {
     final theme = WayfareTheme.of(context);
 
@@ -500,17 +496,33 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
         border: Border.all(color: WayfareColors.infoBorder),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Flying back?', style: WayfareType.display(20)),
           const SizedBox(height: 8),
           Text(
-            'Add the return flight number above and we will set your last day '
-            'the same way. Skip it if this is one way, or you have not booked '
-            'the way home yet.',
+            'Add the return flight number and we will set your last day the '
+            'same way. Skip it if this is one way, or you have not booked the '
+            'way home yet.',
             style: WayfareType.body(13.5, color: WayfareColors.infoBody),
           ),
           const SizedBox(height: 14),
+          WayfareTextField(
+            controller: _returnNumber,
+            hint: 'AK893',
+            textCapitalization: TextCapitalization.characters,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9 ]')),
+              LengthLimitingTextInputFormatter(7),
+            ],
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          WayfarePrimaryButton(
+            label: 'Find the return flight',
+            onPressed: _typedReturn.isEmpty ? null : _findReturnFlight,
+          ),
+          const SizedBox(height: 10),
           WayfareSecondaryButton(
             label: 'Skip for now',
             onPressed: () => setState(() => _returnSettled = true),
@@ -521,6 +533,20 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
         ],
       ),
     );
+  }
+
+  /// Confirm the return number and move on to its date.
+  void _findReturnFlight() {
+    setState(() {
+      _confirmedReturn = _typedReturn;
+      _returnDate = null;
+      _back = null;
+      _returnSettled = false;
+      _options = const [];
+      _awaitingChoice = null;
+      _manualFor = null;
+      _nearbyDates = const [];
+    });
   }
 
   // --- shared pieces ---
@@ -655,13 +681,13 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
                     'We do have it on these days:',
             style: WayfareType.body(13.5, color: WayfareColors.amberInk),
           ),
-          if (_nearbyDates.isNotEmpty) ...[
+          if (_closestDates(date).isNotEmpty) ...[
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final iso in _nearbyDates)
+                for (final iso in _closestDates(date))
                   WayfareSelectChip(
                     label: formatLongDate(DateTime.parse(iso)),
                     selected: false,
@@ -673,6 +699,16 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
             ),
           ],
           const SizedBox(height: 14),
+          // Two ways on, both of which respect the traveller over our data:
+          // a different date, or the times straight off the booking.
+          WayfareSecondaryButton(
+            label: 'Pick another date',
+            onPressed: () => _openDatePicker(context, leg),
+            minHeight: WayfareTouch.ios,
+            fontSize: 13.5,
+            foreground: WayfareColors.amberButtonInk,
+          ),
+          const SizedBox(height: 10),
           WayfareSecondaryButton(
             label: 'Enter the times myself',
             onPressed: () => _openManualEntry(leg),
@@ -683,6 +719,22 @@ class _BookedFlightScreenState extends State<BookedFlightScreen> {
         ],
       ),
     );
+  }
+
+  /// The five dates nearest the one asked for.
+  ///
+  /// The provider answers with a fortnight either side, which is more list
+  /// than anyone reads. Nearest-first keeps the likely correction — a day out
+  /// — at the front, and the picker covers anything further away.
+  List<String> _closestDates(DateTime? around) {
+    if (_nearbyDates.isEmpty || around == null) return _nearbyDates;
+    final sorted = [..._nearbyDates]..sort((a, b) {
+        final da = DateTime.parse(a).difference(around).inDays.abs();
+        final db = DateTime.parse(b).difference(around).inDays.abs();
+        return da.compareTo(db);
+      });
+    final closest = sorted.take(5).toList()..sort();
+    return closest;
   }
 
   Future<void> _openManualEntry(_Leg leg) async {

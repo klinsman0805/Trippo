@@ -10,6 +10,38 @@ import '../../state/wayfare_controller.dart';
 import 'formatting.dart';
 import 'itinerary/day_editing.dart';
 
+/// The bar pinned above the nav while reading a day.
+///
+/// Was at the end of the scroll, which meant reaching it required scrolling
+/// past everything on a full day — the one point at which you are least
+/// likely to still want it.
+class DayActionBar extends StatelessWidget {
+  const DayActionBar({super.key, required this.controller});
+
+  final WayfareController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final day = controller.currentDay;
+    if (day == null || controller.isEditingDay) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: const BoxDecoration(
+        color: WayfareColors.bgApp,
+        border: Border(top: BorderSide(color: WayfareColors.hairline)),
+      ),
+      child: WayfareSecondaryButton(
+        label: 'Edit this day',
+        onPressed: () => controller.startEditingDay(day.day.toInt()),
+        fontSize: 14,
+        foreground: WayfareColors.ink,
+        background: WayfareColors.surface,
+      ),
+    );
+  }
+}
+
 /// Trip tab: one day at a time behind a horizontal day-chip scroller.
 class TripTab extends StatelessWidget {
   const TripTab({
@@ -17,6 +49,7 @@ class TripTab extends StatelessWidget {
     required this.controller,
     required this.onAddActivity,
     required this.onEditActivity,
+    required this.onRemoveActivity,
     required this.onMoveActivity,
     required this.onChangeDayCount,
   });
@@ -26,6 +59,7 @@ class TripTab extends StatelessWidget {
   /// Opens the add sheet for one slot on the selected day.
   final void Function(TimeOfDay slot) onAddActivity;
   final ValueChanged<PlanBlock> onEditActivity;
+  final ValueChanged<PlanBlock> onRemoveActivity;
   final ValueChanged<PlanBlock> onMoveActivity;
   final VoidCallback onChangeDayCount;
 
@@ -70,7 +104,7 @@ class TripTab extends StatelessWidget {
                 if (controller.dateEnvelope?.shortDayFor(day.day) case final short?)
                   ShortDayBand(
                     short: short,
-                    flightLabel: controller.flightLabel,
+                    flightLabel: controller.flightLabelFor(short),
                     onSeeOtherFlights: controller.onSeeOtherFlights,
                   ),
                 _dayMeta(day, currency),
@@ -124,24 +158,14 @@ class TripTab extends StatelessWidget {
                     foreground: WayfareColors.muted,
                   ),
                   const SizedBox(height: 10),
-                ] else ...[
-                  if (day.blocks.any((b) => b.optional)) ...[
-                    // Only offered when there is something optional to hide;
-                    // otherwise it is a control that does nothing.
-                    WayfareSecondaryButton(
-                      label: controller.showOptional
-                          ? 'Hide optional activities'
-                          : 'Show optional activities',
-                      onPressed: controller.toggleOptional,
-                      fontSize: 13.5,
-                      foreground: WayfareColors.inkSecondary,
-                      background: WayfareColors.surface.withValues(alpha: 0.7),
-                    ),
-                    const SizedBox(height: 10),
-                  ],
+                ] else if (day.blocks.any((b) => b.optional)) ...[
+                  // Only offered when there is something optional to hide;
+                  // otherwise it is a control that does nothing.
                   WayfareSecondaryButton(
-                    label: 'Edit this day',
-                    onPressed: () => controller.startEditingDay(day.day.toInt()),
+                    label: controller.showOptional
+                        ? 'Hide optional activities'
+                        : 'Show optional activities',
+                    onPressed: controller.toggleOptional,
                     fontSize: 13.5,
                     foreground: WayfareColors.inkSecondary,
                     background: WayfareColors.surface.withValues(alpha: 0.7),
@@ -168,10 +192,14 @@ class TripTab extends StatelessWidget {
     if (!controller.isEditingDay) {
       return [
         for (final block in blocks) ...[
-          ActivityCard(
-            block: block,
-            members: controller.members,
-            currency: currency,
+          SwipeableActivity(
+            onEdit: () => onEditActivity(block),
+            onDelete: () => onRemoveActivity(block),
+            child: ActivityCard(
+              block: block,
+              members: controller.members,
+              currency: currency,
+            ),
           ),
           const SizedBox(height: WayfareSpace.cardGap),
         ],

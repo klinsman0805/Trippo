@@ -120,6 +120,13 @@ class _WayfareShellState extends State<WayfareShell> {
         ),
         if (_controller.tab == WayfareTab.chat)
           RefineComposer(controller: _controller),
+        // Pinned above the nav rather than buried at the end of the day's
+        // scroll, which is exactly where it stops being reachable.
+        if (_controller.tab == WayfareTab.itinerary &&
+            _controller.hasPlan &&
+            !_controller.isFailed &&
+            !_controller.needsInfo)
+          DayActionBar(controller: _controller),
         WayfareNavBar(
           current: _controller.tab,
           onSelect: _controller.goTo,
@@ -213,6 +220,7 @@ class _WayfareShellState extends State<WayfareShell> {
           controller: _controller,
           onAddActivity: _openAddActivity,
           onEditActivity: _openEditActivity,
+          onRemoveActivity: _openRemoveActivity,
           onMoveActivity: _openMoveActivity,
           onChangeDayCount: _openDayCount,
         ),
@@ -508,6 +516,19 @@ class _WayfareShellState extends State<WayfareShell> {
                 _pickDatesByHand();
               },
             ),
+            // Editing lives here too, so a day can be changed from anywhere
+            // rather than only from the button at the end of it.
+            if (_controller.hasPlan)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined, color: WayfareColors.ink),
+                title: Text('Edit day ${_controller.selectedDay}'),
+                subtitle: const Text('Add, change or reorder activities'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _controller.goTo(WayfareTab.itinerary);
+                  _controller.startEditingDay(_controller.selectedDay);
+                },
+              ),
             // This is where regenerating lives now that the header icon no
             // longer implies it. Labelled, so it cannot be hit by accident.
             if (_controller.canGenerate)
