@@ -18,7 +18,6 @@ class TripTab extends StatelessWidget {
     required this.onAddActivity,
     required this.onEditActivity,
     required this.onRemoveActivity,
-    required this.onMoveActivity,
   });
 
   final WayfareController controller;
@@ -27,7 +26,6 @@ class TripTab extends StatelessWidget {
   final void Function(TimeOfDay slot) onAddActivity;
   final ValueChanged<PlanBlock> onEditActivity;
   final ValueChanged<PlanBlock> onRemoveActivity;
-  final ValueChanged<PlanBlock> onMoveActivity;
 
   @override
   Widget build(BuildContext context) {
@@ -85,9 +83,6 @@ class TripTab extends StatelessWidget {
                   )
                 else
                   ..._slotGroups(currency),
-                // A short day says why it is short rather than being padded.
-                if (controller.dateEnvelope?.shortDayFor(day.day) case final short?)
-                  _EmptySlotRow(short: short),
                 if (!controller.dayIsEmpty(day))
                   for (final slot in controller.openSlots) ...[
                     AddSlotRow(slot: slot, onAdd: () => onAddActivity(slot)),
@@ -146,7 +141,6 @@ class TripTab extends StatelessWidget {
             members: controller.members,
             currency: currency,
             onEdit: onEditActivity,
-            onMove: onMoveActivity,
             onReorder: controller.reorderActivity,
           ),
     ];
@@ -342,7 +336,6 @@ class _ReorderableSlot extends StatelessWidget {
     required this.members,
     required this.currency,
     required this.onEdit,
-    required this.onMove,
     required this.onReorder,
   });
 
@@ -351,7 +344,6 @@ class _ReorderableSlot extends StatelessWidget {
   final List<Member> members;
   final String currency;
   final ValueChanged<PlanBlock> onEdit;
-  final ValueChanged<PlanBlock> onMove;
   final void Function(String blockId, int toIndex) onReorder;
 
   static String _slotName(TimeOfDay slot) => switch (slot) {
@@ -404,19 +396,6 @@ class _ReorderableSlot extends StatelessWidget {
                     block: block,
                     members: members,
                     currency: currency,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: WayfareTouch.ios,
-                height: WayfareTouch.ios,
-                child: IconButton(
-                  onPressed: () => onMove(block),
-                  tooltip: 'Move to another day',
-                  icon: const Icon(
-                    Icons.swap_vert,
-                    size: 20,
-                    color: WayfareColors.inkSecondary,
                   ),
                 ),
               ),
@@ -676,7 +655,7 @@ class _DashedBorderPainter extends CustomPainter {
 ///
 /// The planner left those slots out deliberately; this says so, in the day's
 /// own context, with a way back to the decision that caused it.
-class ShortDayBand extends StatelessWidget {
+class ShortDayBand extends StatefulWidget {
   const ShortDayBand({
     super.key,
     required this.short,
@@ -687,96 +666,95 @@ class ShortDayBand extends StatelessWidget {
   final String? flightLabel;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = WayfareTheme.of(context);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: WayfareColors.amberSurface,
-        borderRadius: theme.cardLg,
-        border: Border.all(color: WayfareColors.amberBorder, width: 1.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          WayfareEyebrow(
-            ['Short day', ?flightLabel].join(' · '),
-            color: WayfareColors.amberInkDeep,
-            size: 11.5,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _headline(),
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              height: 1.35,
-              color: WayfareColors.ink,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${short.note} The planner left the rest out rather than '
-            'pretending it exists.',
-            style: WayfareType.body(13.5, color: WayfareColors.amberInk),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _headline() {
-    if (short.isWriteOff) {
-      return 'Day ${short.day} has no usable time.';
-    }
-    return short.reason == 'late_arrival'
-        ? 'Day ${short.day} runs from ${formatClock(short.at)}, not the morning.'
-        : 'Day ${short.day} ends at ${formatClock(short.at)}.';
-  }
+  State<ShortDayBand> createState() => _ShortDayBandState();
 }
 
-/// Explicit "nothing else planned" row. The design is emphatic that a short day
-/// must never be padded with filler, so the gap is stated instead of hidden.
-class _EmptySlotRow extends StatelessWidget {
-  const _EmptySlotRow({required this.short});
-
-  final ShortDay short;
+class _ShortDayBandState extends State<ShortDayBand> {
+  /// Collapsed by default. The headline is the whole finding — which day is
+  /// short and from when — and the explanation underneath is worth reading
+  /// once, not on every scroll past it.
+  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = WayfareTheme.of(context);
+    final short = widget.short;
 
-    return CustomPaint(
-      painter: _DashedBorderPainter(
-        color: const Color(0xFFDCD0BC),
-        radius: theme.radius,
-        strokeWidth: 1.5,
-      ),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        alignment: Alignment.center,
-        child: Text(
-          _copy(),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 13,
-            height: 1.45,
-            color: WayfareColors.mutedLight,
+    return Semantics(
+      button: true,
+      expanded: _open,
+      child: Material(
+        color: WayfareColors.amberSurface,
+        borderRadius: theme.cardLg,
+        child: InkWell(
+          onTap: () => setState(() => _open = !_open),
+          borderRadius: theme.cardLg,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            decoration: BoxDecoration(
+              borderRadius: theme.cardLg,
+              border: Border.all(color: WayfareColors.amberBorder, width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          WayfareEyebrow(
+                            ['Short day', ?widget.flightLabel].join(' · '),
+                            color: WayfareColors.amberInkDeep,
+                            size: 11.5,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _headline(),
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w500,
+                              height: 1.3,
+                              color: WayfareColors.ink,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      _open ? Icons.expand_less : Icons.expand_more,
+                      size: 20,
+                      color: WayfareColors.amberInkDeep,
+                    ),
+                  ],
+                ),
+                if (_open) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${short.note} The planner left the rest out rather than '
+                    'pretending it exists.',
+                    style: WayfareType.body(13.5, color: WayfareColors.amberInk),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  String _copy() {
-    if (short.reason == 'late_arrival') {
-      return short.usableSlots.length <= 1
-          ? 'Nothing else planned. The flight lands too late for anything more than dinner.'
-          : 'Nothing else planned. The flight lands too late for a morning.';
+  String _headline() {
+    final short = widget.short;
+    if (short.isWriteOff) {
+      return 'Day ${short.day} has no usable time.';
     }
-    return 'Nothing else planned. The flight leaves too early for anything before it.';
+    return short.reason == 'late_arrival'
+        ? 'Day ${short.day} runs from ${formatClock(short.at)}, not the morning.'
+        : 'Day ${short.day} ends at ${formatClock(short.at)}.';
   }
 }

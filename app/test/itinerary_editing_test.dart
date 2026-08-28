@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart' hide TimeOfDay;
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -11,6 +13,7 @@ import 'package:trippo/models/plan.dart';
 import 'package:trippo/models/trip.dart';
 import 'package:trippo/state/wayfare_controller.dart';
 import 'package:trippo/screens/wayfare/itinerary/activity_sheet.dart';
+import 'package:trippo/screens/wayfare/formatting.dart';
 import 'package:trippo/screens/wayfare/itinerary/activity_sheets.dart';
 import 'package:trippo/screens/wayfare/itinerary/day_editing.dart';
 import 'package:trippo/screens/wayfare/itinerary/regenerate_sheet.dart';
@@ -135,7 +138,6 @@ Widget dayFor(WayfareController controller) => TripTab(
       onAddActivity: (_) {},
       onEditActivity: (_) {},
       onRemoveActivity: (_) {},
-      onMoveActivity: (_) {},
     );
 
 void main() {
@@ -272,6 +274,75 @@ void main() {
     });
   });
 
+  group('Slot and start time', () {
+    test('a stated time decides the part of the day', () {
+      // 9:00 AM filed under Afternoon is not a preference — it is two answers
+      // to the same question, which the sheet used to allow.
+      expect(slotForTime('09:00'), TimeOfDay.morning);
+      expect(slotForTime('11:59'), TimeOfDay.morning);
+      expect(slotForTime('12:00'), TimeOfDay.afternoon);
+      expect(slotForTime('16:59'), TimeOfDay.afternoon);
+      expect(slotForTime('17:00'), TimeOfDay.evening);
+      expect(slotForTime('23:30'), TimeOfDay.evening);
+      // Midnight belongs to the morning it starts, not the evening before.
+      expect(slotForTime('00:15'), TimeOfDay.morning);
+    });
+
+    testWidgets('an activity with a time shows the slot as decided for it',
+        (tester) async {
+      await pump(
+        tester,
+        ActivitySheet(
+          day: 1,
+          // Stored as afternoon but timed at 9 AM — an older activity allowed
+          // to disagree with itself. Opening it corrects the slot.
+          existing: block(
+            source: 'user',
+            slot: TimeOfDay.afternoon,
+            startTime: '09:00',
+          ),
+          onSave: (_) {},
+          onCancel: () {},
+        ),
+      );
+
+      expect(
+        find.textContaining('Set by the start time'),
+        findsOneWidget,
+      );
+      expect(find.text('9:00 AM'), findsOneWidget);
+      // Morning is the one now selected, and every button is frozen: the
+      // stated time already answered this.
+      final morning = tester.semantics.find(find.text('Morning'));
+      expect(morning.flagsCollection.isSelected, Tristate.isTrue);
+      expect(morning.flagsCollection.isEnabled, Tristate.isFalse);
+      expect(
+        tester.semantics
+            .find(find.text('Afternoon'))
+            .flagsCollection
+            .isSelected,
+        Tristate.isFalse,
+      );
+    });
+
+    testWidgets('without a time, the part of the day is yours to pick',
+        (tester) async {
+      Map<String, dynamic>? saved;
+      await pump(
+        tester,
+        ActivitySheet(day: 1, onSave: (a) => saved = a, onCancel: () {}),
+      );
+
+      expect(find.textContaining('Set by the start time'), findsNothing);
+      await tester.enterText(find.byType(TextField).first, 'Wander');
+      await tapDown(tester, find.text('Evening'));
+      await tapDown(tester, find.text('Add to day 1'));
+
+      expect(saved!['time_of_day'], 'evening');
+      expect(saved!['start_time'], isNull);
+    });
+  });
+
   group('Editing an activity', () {
     testWidgets('prefills, opens expanded, and explains the pin',
         (tester) async {
@@ -403,50 +474,6 @@ void main() {
         find.text('The morning and the evening are open — add something'),
         findsOneWidget,
       );
-    });
-  });
-
-  group('Moving an activity', () {
-    testWidgets('lists other days, marks empty ones, restates the destination',
-        (tester) async {
-      int? movedDay;
-      TimeOfDay? movedSlot;
-
-      await pump(
-        tester,
-        MoveActivitySheet(
-          block: block(),
-          fromDay: 3,
-          days: const [
-            (day: 1, date: '2026-09-12', blockCount: 3),
-            (day: 2, date: '2026-09-13', blockCount: 0),
-            (day: 3, date: '2026-09-14', blockCount: 2),
-          ],
-          onMove: (d, s) {
-            movedDay = d;
-            movedSlot = s;
-          },
-          onCancel: () {},
-        ),
-      );
-
-      // The day you are on is not a destination.
-      expect(find.text('Day 3'), findsNothing);
-      expect(find.text('Day 1'), findsOneWidget);
-      expect(find.text('Empty'), findsOneWidget);
-      expect(find.text('3 activities'), findsOneWidget);
-
-      // Cancel says what staying means.
-      expect(find.text('Leave it on day 3'), findsOneWidget);
-      expect(find.text('Pick a day'), findsOneWidget);
-
-      await tapDown(tester, find.text('Day 2'));
-      await tapDown(tester, find.text('Morning'));
-      expect(find.text('Move to day 2, morning'), findsOneWidget);
-
-      await tapDown(tester, find.text('Move to day 2, morning'));
-      expect(movedDay, 2);
-      expect(movedSlot, TimeOfDay.morning);
     });
   });
 

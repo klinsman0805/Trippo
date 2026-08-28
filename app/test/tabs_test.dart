@@ -217,7 +217,6 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
-          onMoveActivity: (_) {},
         ));
 
       expect(find.text('Day 1'), findsOneWidget);
@@ -240,7 +239,6 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
-          onMoveActivity: (_) {},
         ));
 
       expect(find.text('Sunset drinks at Senhora do Monte'), findsNothing);
@@ -259,7 +257,6 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
-          onMoveActivity: (_) {},
         ));
 
       // The morning block covers 2 of 3 travellers → names, not "Everyone".
@@ -279,7 +276,6 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
-          onMoveActivity: (_) {},
         ));
 
       expect(find.text('Updated from your last chat request.'), findsOneWidget);

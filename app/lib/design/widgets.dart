@@ -47,6 +47,36 @@ Future<bool> confirmDestructive(
   return confirmed ?? false;
 }
 
+/// The grabber at the top of a bottom sheet.
+///
+/// Must sit *outside* the sheet's scroll view. Inside it, a downward drag on
+/// the grabber scrolls the content instead of dismissing the sheet — which is
+/// the one gesture everyone reaches for to close one.
+class WayfareSheetGrabber extends StatelessWidget {
+  const WayfareSheetGrabber({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      // Full width and a real height, so the draggable target is the whole
+      // top strip rather than the 4px bar people have to hit exactly.
+      width: double.infinity,
+      padding: const EdgeInsets.only(top: 10, bottom: 12),
+      color: Colors.transparent,
+      child: Center(
+        child: Container(
+          width: 44,
+          height: 4,
+          decoration: BoxDecoration(
+            color: WayfareColors.border,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A 999-radius pill with a border — the OPTIONAL badge, conflict tags, pace
 /// chips. Sizes vary per use, so they're parameters rather than variants.
 class WayfarePill extends StatelessWidget {

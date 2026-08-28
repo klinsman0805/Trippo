@@ -222,7 +222,6 @@ class _WayfareShellState extends State<WayfareShell> {
           onAddActivity: _openAddActivity,
           onEditActivity: _openEditActivity,
           onRemoveActivity: _openRemoveActivity,
-          onMoveActivity: _openMoveActivity,
         ),
       WayfareTab.budget => BudgetTab(controller: _controller),
       WayfareTab.group => GroupTab(controller: _controller),
@@ -387,25 +386,6 @@ class _WayfareShellState extends State<WayfareShell> {
         onRemove: () {
           Navigator.of(context).pop();
           _controller.removeActivity(block.id);
-        },
-      ),
-    );
-  }
-
-  Future<void> _openMoveActivity(PlanBlock block) async {
-    final from = _controller.selectedDay;
-    await _sheet2(
-      MoveActivitySheet(
-        block: block,
-        fromDay: from,
-        days: [
-          for (final d in _controller.plan?.itinerary ?? const [])
-            (day: d.day.toInt(), date: d.date, blockCount: d.blocks.length),
-        ],
-        onCancel: () => Navigator.of(context).pop(),
-        onMove: (day, slot) {
-          Navigator.of(context).pop();
-          _controller.moveActivity(block.id, day: day, slot: slot);
         },
       ),
     );

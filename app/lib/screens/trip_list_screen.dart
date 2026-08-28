@@ -95,29 +95,53 @@ class _TripListScreenState extends State<TripListScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const WayfareEyebrow(
-                    'Wayfare',
-                    color: WayfareColors.accent,
-                    size: 13,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const WayfareEyebrow(
+                          'Wayfare',
+                          color: WayfareColors.accent,
+                          size: 13,
+                        ),
+                        const SizedBox(height: 2),
+                        Text('Your trips', style: WayfareType.display(32)),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 2),
-                  Text('Your trips', style: WayfareType.display(32)),
+                  // Matches the Trip tab's own header action, so adding is in
+                  // the same place whichever screen you are on — and it stops
+                  // a full-width button sitting under an empty list.
+                  Semantics(
+                    button: true,
+                    label: 'Start a new trip',
+                    child: Material(
+                      color: WayfareColors.surface,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        onTap: _createTrip,
+                        customBorder: const CircleBorder(),
+                        child: const SizedBox(
+                          width: WayfareTouch.input,
+                          height: WayfareTouch.input,
+                          child: Icon(
+                            Icons.add,
+                            size: 22,
+                            color: WayfareColors.accent,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
             _FeatureNotice(repo: _repo),
             Expanded(child: _body()),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-              child: WayfarePrimaryButton(
-                label: 'Start a new trip',
-                onPressed: _createTrip,
-              ),
-            ),
           ],
         ),
       ),
@@ -157,7 +181,8 @@ class _TripListScreenState extends State<TripListScreen> {
               Text('No trips yet', style: WayfareType.display(24)),
               const SizedBox(height: 9),
               Text(
-                'Start one, add who\'s coming, and the planner takes it from there.',
+                'Tap + to start one. Add who is coming, and the planner takes '
+                'it from there.',
                 textAlign: TextAlign.center,
                 style: WayfareType.body(13.5, color: WayfareColors.subhead),
               ),
@@ -286,7 +311,8 @@ class _TripTile extends StatelessWidget {
     final confirmed = await confirmDestructive(
       context,
       title: 'Delete ${trip.title}?',
-      body: 'This takes ${_readableList(losses)} with it, and cannot be undone.',
+      body:
+          'This takes ${_readableList(losses)} with it, and cannot be undone.',
       confirmLabel: 'Delete',
       cancelLabel: 'Keep it',
     );

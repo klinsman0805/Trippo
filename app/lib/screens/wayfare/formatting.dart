@@ -124,6 +124,20 @@ String formatClock(String hhmm) {
   return '$display:$minute $suffix';
 }
 
+/// Which part of the day a clock time falls in.
+///
+/// Noon and 5 PM are the boundaries — the same ones the flight envelope uses
+/// when working out which slots a late arrival leaves usable. A stated time is
+/// the more specific fact, so it decides the slot rather than sitting beside
+/// it: 9:00 AM filed under Afternoon is not a preference, it is two answers to
+/// the same question.
+plan_models.TimeOfDay slotForTime(String hhmm) {
+  final hour = int.tryParse(hhmm.split(':').first) ?? 0;
+  if (hour < 12) return plan_models.TimeOfDay.morning;
+  if (hour < 17) return plan_models.TimeOfDay.afternoon;
+  return plan_models.TimeOfDay.evening;
+}
+
 /// `Sat 12 Sep`
 String weekdayAndDate(String iso) {
   final date = DateTime.tryParse(iso);

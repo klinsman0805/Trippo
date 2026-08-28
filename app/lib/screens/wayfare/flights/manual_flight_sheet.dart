@@ -89,8 +89,9 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
         child: Container(
           decoration: BoxDecoration(
             color: WayfareColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(theme.sheetRadius)),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(theme.sheetRadius),
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x2E000000),
@@ -99,108 +100,111 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
               ),
             ],
           ),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(18, 10, 18, 46 + viewInsets),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 4, bottom: 16),
-                    decoration: BoxDecoration(
-                      color: WayfareColors.border,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.flightNumber,
-                        style: WayfareType.display(24),
+          // The grabber sits outside the scroll view: inside it, a downward
+          // drag scrolls the content instead of dismissing the sheet, which
+          // is the gesture everyone reaches for to close one.
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const WayfareSheetGrabber(),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(18, 0, 18, 46 + viewInsets),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              widget.flightNumber,
+                              style: WayfareType.display(24),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: widget.onCancel,
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: WayfareColors.mutedLight,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    TextButton(
-                      onPressed: widget.onCancel,
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontSize: 14,
+                      Text(
+                        formatLongDate(widget.date),
+                        style: const TextStyle(
+                          fontSize: 12.5,
                           color: WayfareColors.mutedLight,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                Text(
-                  formatLongDate(widget.date),
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: WayfareColors.mutedLight,
+                      const SizedBox(height: 14),
+                      Text(
+                        'Copy these off your booking. Times are local to each '
+                        'airport — exactly as they print on the ticket, with no '
+                        'converting.',
+                        style: WayfareType.body(
+                          13.5,
+                          color: WayfareColors.subhead,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(child: _airportField('From', _from)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _airportField('To', _to)),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _timeField(
+                              'Departs',
+                              _departs,
+                              (t) => setState(() => _departs = t),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _timeField(
+                              'Arrives',
+                              _arrives,
+                              (t) => setState(() => _arrives = t),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      _nextDayRow(),
+                      if (_error != null) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          _error!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            height: 1.45,
+                            color: WayfareColors.overBudget,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      WayfarePrimaryButton(
+                        label: _saving ? 'Saving…' : 'Use this flight',
+                        onPressed: _canSave && !_saving ? _save : null,
+                        minHeight: WayfareTouch.sheetCta,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  'Copy these off your booking. Times are local to each '
-                  'airport — exactly as they print on the ticket, with no '
-                  'converting.',
-                  style: WayfareType.body(13.5, color: WayfareColors.subhead),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(child: _airportField('From', _from)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _airportField('To', _to)),
-                  ],
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _timeField(
-                        'Departs',
-                        _departs,
-                        (t) => setState(() => _departs = t),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _timeField(
-                        'Arrives',
-                        _arrives,
-                        (t) => setState(() => _arrives = t),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                _nextDayRow(),
-                if (_error != null) ...[
-                  const SizedBox(height: 14),
-                  Text(
-                    _error!,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      height: 1.45,
-                      color: WayfareColors.overBudget,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 18),
-                WayfarePrimaryButton(
-                  label: _saving ? 'Saving…' : 'Use this flight',
-                  onPressed: _canSave && !_saving ? _save : null,
-                  minHeight: WayfareTouch.sheetCta,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -225,11 +229,7 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
     );
   }
 
-  Widget _timeField(
-    String label,
-    String? value,
-    ValueChanged<String> onPick,
-  ) {
+  Widget _timeField(String label, String? value, ValueChanged<String> onPick) {
     final theme = WayfareTheme.of(context);
 
     return Column(
@@ -300,16 +300,16 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
   }
 
   Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(
-          text,
-          style: const TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: WayfareColors.inkSecondary,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        color: WayfareColors.inkSecondary,
+      ),
+    ),
+  );
 
   static String _isoDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-'
@@ -322,8 +322,9 @@ class _ManualFlightSheetState extends State<ManualFlightSheet> {
       _error = null;
     });
 
-    final arrivalDate =
-        _arrivesNextDay ? widget.date.add(const Duration(days: 1)) : widget.date;
+    final arrivalDate = _arrivesNextDay
+        ? widget.date.add(const Duration(days: 1))
+        : widget.date;
 
     try {
       final offer = await widget.api.manualFlight(

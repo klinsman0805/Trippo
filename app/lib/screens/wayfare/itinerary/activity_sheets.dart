@@ -101,26 +101,26 @@ class SheetFrame extends StatelessWidget {
               ),
             ],
           ),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(18, 10, 18, 46 + viewInsets),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 4, bottom: 16),
-                    decoration: BoxDecoration(
-                      color: WayfareColors.border,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
+          // The grabber sits outside the scroll view: inside it, a downward
+          // drag scrolls the content instead of dismissing the sheet, which
+          // is the gesture everyone reaches for to close one.
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const WayfareSheetGrabber(),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(18, 0, 18, 46 + viewInsets),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ...children,
+                    ],
                   ),
                 ),
-                ...children,
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -211,207 +211,5 @@ class RemoveActivitySheet extends StatelessWidget {
     final clean = title.trim();
     if (clean.length <= 28) return clean.toLowerCase();
     return '${clean.substring(0, 25).trimRight().toLowerCase()}…';
-  }
-}
-
-/// Moving an activity to another day.
-///
-/// A sheet rather than a drag: the Trip tab shows one day at a time, so there
-/// is nowhere to drag *to*. The confirm button restates the destination, since
-/// by then the day you came from is off screen.
-class MoveActivitySheet extends StatefulWidget {
-  const MoveActivitySheet({
-    super.key,
-    required this.block,
-    required this.fromDay,
-    required this.days,
-    required this.onMove,
-    required this.onCancel,
-  });
-
-  final PlanBlock block;
-  final int fromDay;
-
-  /// Every day in the trip, with how full it currently is.
-  final List<({int day, String? date, int blockCount})> days;
-
-  final void Function(int day, TimeOfDay slot) onMove;
-  final VoidCallback onCancel;
-
-  @override
-  State<MoveActivitySheet> createState() => _MoveActivitySheetState();
-}
-
-class _MoveActivitySheetState extends State<MoveActivitySheet> {
-  int? _day;
-  late TimeOfDay _slot;
-
-  @override
-  void initState() {
-    super.initState();
-    _slot = widget.block.timeOfDay;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = WayfareTheme.of(context);
-    final candidates =
-        widget.days.where((d) => d.day != widget.fromDay).toList();
-
-    return SheetFrame(
-      children: [
-        Text('Move this activity', style: WayfareType.display(22)),
-        const SizedBox(height: 6),
-        Text(
-          widget.block.activity,
-          style: WayfareType.body(13.5, color: WayfareColors.subhead),
-        ),
-        const SizedBox(height: 16),
-        if (candidates.isEmpty)
-          Text(
-            'This trip only has the one day, so there is nowhere to move it to.',
-            style: WayfareType.body(13.5, color: WayfareColors.mutedLight),
-          )
-        else ...[
-          for (final candidate in candidates) ...[
-            _DayRow(
-              day: candidate.day,
-              date: candidate.date,
-              blockCount: candidate.blockCount,
-              selected: _day == candidate.day,
-              onTap: () => setState(() => _day = candidate.day),
-            ),
-            const SizedBox(height: 8),
-          ],
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: const WayfareEyebrow('Part of the day', size: 10.5),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final slot in const [
-                TimeOfDay.morning,
-                TimeOfDay.afternoon,
-                TimeOfDay.evening,
-                TimeOfDay.anytime,
-              ])
-                WayfareSelectChip(
-                  label: _slotLabel(slot),
-                  selected: _slot == slot,
-                  onTap: () => setState(() => _slot = slot),
-                ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          WayfarePrimaryButton(
-            label: _day == null
-                ? 'Pick a day'
-                : 'Move to day $_day, ${_slotLabel(_slot).toLowerCase()}',
-            onPressed: _day == null ? null : () => widget.onMove(_day!, _slot),
-            minHeight: WayfareTouch.sheetCta,
-          ),
-        ],
-        const SizedBox(height: 10),
-        WayfareSecondaryButton(
-          // Names what staying means rather than saying "Cancel", which would
-          // leave the user to work out what the default was.
-          label: 'Leave it on day ${widget.fromDay}',
-          onPressed: widget.onCancel,
-          background: Colors.transparent,
-          foreground: WayfareColors.muted,
-          fontSize: 13.5,
-        ),
-        SizedBox(height: theme.isAndroid ? 4 : 0),
-      ],
-    );
-  }
-
-  static String _slotLabel(TimeOfDay slot) => switch (slot) {
-        TimeOfDay.morning => 'Morning',
-        TimeOfDay.afternoon => 'Afternoon',
-        TimeOfDay.evening => 'Evening',
-        TimeOfDay.anytime => 'Anytime',
-      };
-}
-
-class _DayRow extends StatelessWidget {
-  const _DayRow({
-    required this.day,
-    required this.date,
-    required this.blockCount,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final int day;
-  final String? date;
-  final int blockCount;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = WayfareTheme.of(context);
-    final empty = blockCount == 0;
-
-    return Material(
-      color: selected ? WayfareColors.surfaceAlt : Colors.transparent,
-      borderRadius: theme.card,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: theme.card,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: WayfareTouch.input),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-          decoration: BoxDecoration(
-            borderRadius: theme.card,
-            border: Border.all(
-              color: selected ? WayfareColors.ink : WayfareColors.border,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Day $day',
-                      style: const TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    if ((date ?? '').isNotEmpty)
-                      Text(
-                        formatShortDate(date),
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: WayfareColors.mutedLight,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Text(
-                empty
-                    ? 'Empty'
-                    : '$blockCount ${blockCount == 1 ? 'activity' : 'activities'}',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color:
-                      empty ? WayfareColors.accent : WayfareColors.mutedLight,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

@@ -327,6 +327,12 @@ void main() {
         find.text('Day 1 runs from 1:15 PM, not the morning.'),
         findsOneWidget,
       );
+      // The explanation is worth reading once, so it stays folded away until
+      // asked for — the headline above already carries the finding.
+      expect(find.textContaining('rather than pretending it exists'),
+          findsNothing);
+      await tester.tap(find.byType(ShortDayBand));
+      await tester.pumpAndSettle();
       expect(
         find.textContaining('rather than pretending it exists'),
         findsOneWidget,

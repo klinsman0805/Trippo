@@ -89,8 +89,12 @@ class _ActivitySheetState extends State<ActivitySheet> {
     );
     _weather = TextEditingController(text: existing?.weatherBackup ?? '');
 
-    _slot = existing?.timeOfDay ?? widget.initialSlot;
     _startTime = existing?.startTime;
+    // A time already on the activity wins over the slot stored beside it —
+    // older activities were allowed to disagree with themselves.
+    _slot = _startTime != null
+        ? slotForTime(_startTime!)
+        : (existing?.timeOfDay ?? widget.initialSlot);
     _optional = existing?.optional ?? false;
     _moreOpen = _isEditing;
 
@@ -110,6 +114,19 @@ class _ActivitySheetState extends State<ActivitySheet> {
 
   bool get _canSave => _title.text.trim().isNotEmpty;
 
+  /// A stated time is the more specific fact, so it decides the slot.
+  ///
+  /// Letting both be set independently allowed 9:00 AM to sit under Afternoon,
+  /// which is not a preference — it is two answers to the same question. The
+  /// slot buttons go quiet while a time is set; clearing the time hands the
+  /// choice back.
+  void _setStartTime(String? value) {
+    setState(() {
+      _startTime = value;
+      if (value != null) _slot = slotForTime(value);
+    });
+  }
+
   void _save() {
     if (!_canSave) return;
 
@@ -125,8 +142,9 @@ class _ActivitySheetState extends State<ActivitySheet> {
       'estimated_duration_minutes': minutes,
       'estimated_cost_per_person': cost,
       'optional': _optional,
-      'weather_backup':
-          _weather.text.trim().isEmpty ? null : _weather.text.trim(),
+      'weather_backup': _weather.text.trim().isEmpty
+          ? null
+          : _weather.text.trim(),
     });
   }
 
@@ -148,8 +166,9 @@ class _ActivitySheetState extends State<ActivitySheet> {
         child: Container(
           decoration: BoxDecoration(
             color: WayfareColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(theme.sheetRadius)),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(theme.sheetRadius),
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x2E000000),
@@ -158,102 +177,118 @@ class _ActivitySheetState extends State<ActivitySheet> {
               ),
             ],
           ),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(18, 10, 18, 46 + viewInsets),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 4, bottom: 14),
-                    decoration: BoxDecoration(
-                      color: WayfareColors.border,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-                if (_isEditing) _identityHeader(context) else _addHeader(),
-                const SizedBox(height: 16),
-                if (_isEditing) ...[
-                  _pinExplainer(theme),
-                  const SizedBox(height: 15),
-                ],
-                _label('Part of the day'),
-                _slotGrid(),
-                const SizedBox(height: 15),
-                _label('What is it'),
-                WayfareTextField(
-                  controller: _title,
-                  hint: 'e.g. Hawker dinner at New Lane',
-                  autofocus: !_isEditing,
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+          // The grabber sits outside the scroll view: inside it, a downward
+          // drag scrolls the content instead of dismissing the sheet, which
+          // is the gesture everyone reaches for to close one.
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const WayfareSheetGrabber(),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(18, 0, 18, 46 + viewInsets),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_isEditing)
+                        _identityHeader(context)
+                      else
+                        _addHeader(),
+                      const SizedBox(height: 16),
+                      if (_isEditing) ...[
+                        _pinExplainer(theme),
+                        const SizedBox(height: 15),
+                      ],
+                      _label('Part of the day'),
+                      _slotGrid(),
+                      // The grid is frozen once a time is set, so say why
+                      // rather than leaving four dimmed buttons unexplained.
+                      if (_startTime != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Set by the start time below. Clear the time to '
+                          'choose a part of the day yourself.',
+                          style: WayfareType.body(
+                            12.5,
+                            color: WayfareColors.subhead,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 15),
+                      _label('What is it'),
+                      WayfareTextField(
+                        controller: _title,
+                        hint: 'e.g. Hawker dinner at New Lane',
+                        autofocus: !_isEditing,
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _label('Start time · optional'),
-                          _TimeField(
-                            value: _startTime,
-                            onChanged: (v) => setState(() => _startTime = v),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _label('Start time · optional'),
+                                _TimeField(
+                                  value: _startTime,
+                                  onChanged: _setStartTime,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 15),
-                _label('Venue'),
-                WayfareTextField(
-                  controller: _venue,
-                  hint: 'Place, address or neighbourhood',
-                ),
-                const SizedBox(height: 15),
-                if (!_moreOpen)
-                  WayfareSecondaryButton(
-                    label: 'Add description, duration, cost',
-                    onPressed: () => setState(() => _moreOpen = true),
-                    minHeight: WayfareTouch.ios,
-                    fontSize: 13.5,
-                    foreground: WayfareColors.inkSecondary,
-                  )
-                else
-                  _moreFields(theme),
-                const SizedBox(height: 16),
-                WayfarePrimaryButton(
-                  label: _isEditing
-                      ? 'Save changes'
-                      : 'Add to day ${widget.day}',
-                  onPressed: _canSave ? _save : null,
-                  minHeight: WayfareTouch.sheetCta,
-                  fontSize: 15.5,
-                ),
-                if (!_isEditing) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'A title is enough. You can fill the rest in later.',
-                    textAlign: TextAlign.center,
-                    style: WayfareType.body(
-                      12.5,
-                      color: WayfareColors.mutedLight,
-                    ),
+                      const SizedBox(height: 15),
+                      _label('Venue'),
+                      WayfareTextField(
+                        controller: _venue,
+                        hint: 'Place, address or neighbourhood',
+                      ),
+                      const SizedBox(height: 15),
+                      if (!_moreOpen)
+                        WayfareSecondaryButton(
+                          label: 'Add description, duration, cost',
+                          onPressed: () => setState(() => _moreOpen = true),
+                          minHeight: WayfareTouch.ios,
+                          fontSize: 13.5,
+                          foreground: WayfareColors.inkSecondary,
+                        )
+                      else
+                        _moreFields(theme),
+                      const SizedBox(height: 16),
+                      WayfarePrimaryButton(
+                        label: _isEditing
+                            ? 'Save changes'
+                            : 'Add to day ${widget.day}',
+                        onPressed: _canSave ? _save : null,
+                        minHeight: WayfareTouch.sheetCta,
+                        fontSize: 15.5,
+                      ),
+                      if (!_isEditing) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'A title is enough. You can fill the rest in later.',
+                          textAlign: TextAlign.center,
+                          style: WayfareType.body(
+                            12.5,
+                            color: WayfareColors.mutedLight,
+                          ),
+                        ),
+                      ],
+                      if (_isEditing && widget.onRemove != null) ...[
+                        const SizedBox(height: 10),
+                        _RemoveButton(
+                          day: widget.day,
+                          onRemove: widget.onRemove!,
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-                if (_isEditing && widget.onRemove != null) ...[
-                  const SizedBox(height: 10),
-                  _RemoveButton(
-                    day: widget.day,
-                    onRemove: widget.onRemove!,
-                  ),
-                ],
-              ],
-            ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -261,14 +296,14 @@ class _ActivitySheetState extends State<ActivitySheet> {
   }
 
   Widget _addHeader() => Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          Text('Add an activity', style: WayfareType.display(24)),
-          const Spacer(),
-          _cancelButton(),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.baseline,
+    textBaseline: TextBaseline.alphabetic,
+    children: [
+      Text('Add an activity', style: WayfareType.display(24)),
+      const Spacer(),
+      _cancelButton(),
+    ],
+  );
 
   Widget _identityHeader(BuildContext context) {
     final block = widget.existing!;
@@ -324,12 +359,12 @@ class _ActivitySheetState extends State<ActivitySheet> {
   }
 
   Widget _cancelButton() => TextButton(
-        onPressed: widget.onCancel,
-        child: const Text(
-          'Cancel',
-          style: TextStyle(fontSize: 14, color: WayfareColors.mutedLight),
-        ),
-      );
+    onPressed: widget.onCancel,
+    child: const Text(
+      'Cancel',
+      style: TextStyle(fontSize: 14, color: WayfareColors.mutedLight),
+    ),
+  );
 
   Widget _pinExplainer(WayfareTheme theme) {
     final mine = widget.existing!.isMine;
@@ -344,9 +379,9 @@ class _ActivitySheetState extends State<ActivitySheet> {
       child: Text(
         mine
             ? 'This is one of yours, so the planner leaves it alone. '
-                'Regenerating asks before touching it.'
+                  'Regenerating asks before touching it.'
             : 'The planner wrote this. Once you change it, it becomes yours '
-                'and regenerating will ask before touching it.',
+                  'and regenerating will ask before touching it.',
         style: WayfareType.body(13, color: WayfareColors.writtenInkDeep),
       ),
     );
@@ -373,6 +408,9 @@ class _ActivitySheetState extends State<ActivitySheet> {
                   child: _SlotButton(
                     slot: slots[row * 2 + col],
                     selected: _slot == slots[row * 2 + col],
+                    // Frozen while a time is set — the time already answered
+                    // this, and two answers is the bug.
+                    enabled: _startTime == null,
                     onTap: () => setState(() => _slot = slots[row * 2 + col]),
                   ),
                 ),
@@ -404,9 +442,8 @@ class _ActivitySheetState extends State<ActivitySheet> {
               WayfareSelectChip(
                 label: chip.label,
                 selected: int.tryParse(_duration.text.trim()) == chip.minutes,
-                onTap: () => setState(
-                  () => _duration.text = chip.minutes.toString(),
-                ),
+                onTap: () =>
+                    setState(() => _duration.text = chip.minutes.toString()),
               ),
           ],
         ),
@@ -450,16 +487,16 @@ class _ActivitySheetState extends State<ActivitySheet> {
   }
 
   Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(
-          text,
-          style: const TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: WayfareColors.inkSecondary,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        color: WayfareColors.inkSecondary,
+      ),
+    ),
+  );
 }
 
 class _SlotButton extends StatelessWidget {
@@ -467,18 +504,20 @@ class _SlotButton extends StatelessWidget {
     required this.slot,
     required this.selected,
     required this.onTap,
+    this.enabled = true,
   });
 
   final TimeOfDay slot;
   final bool selected;
+  final bool enabled;
   final VoidCallback onTap;
 
   static String _label(TimeOfDay slot) => switch (slot) {
-        TimeOfDay.morning => 'Morning',
-        TimeOfDay.afternoon => 'Afternoon',
-        TimeOfDay.evening => 'Evening',
-        TimeOfDay.anytime => 'Anytime',
-      };
+    TimeOfDay.morning => 'Morning',
+    TimeOfDay.afternoon => 'Afternoon',
+    TimeOfDay.evening => 'Evening',
+    TimeOfDay.anytime => 'Anytime',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -487,44 +526,48 @@ class _SlotButton extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      child: Material(
-        color: selected ? WayfareColors.ink : WayfareColors.surfaceAlt,
-        borderRadius: theme.card,
-        child: InkWell(
-          onTap: onTap,
+      enabled: enabled,
+      child: Opacity(
+        opacity: enabled || selected ? 1 : 0.4,
+        child: Material(
+          color: selected ? WayfareColors.ink : WayfareColors.surfaceAlt,
           borderRadius: theme.card,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 46),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              borderRadius: theme.card,
-              border: Border.all(
-                color: selected ? WayfareColors.ink : WayfareColors.border,
+          child: InkWell(
+            onTap: enabled ? onTap : null,
+            borderRadius: theme.card,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 46),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                borderRadius: theme.card,
+                border: Border.all(
+                  color: selected ? WayfareColors.ink : WayfareColors.border,
+                ),
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: timeOfDayColor(slot),
-                    shape: BoxShape.circle,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: timeOfDayColor(slot),
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _label(slot),
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    color: selected
-                        ? WayfareColors.surface
-                        : WayfareColors.inkSecondary,
+                  const SizedBox(width: 8),
+                  Text(
+                    _label(slot),
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: selected
+                          ? WayfareColors.surface
+                          : WayfareColors.inkSecondary,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -557,7 +600,9 @@ class _TimeField extends StatelessWidget {
                 if (picked != null) onChanged(picked);
               },
               child: Container(
-                constraints: const BoxConstraints(minHeight: WayfareTouch.input),
+                constraints: const BoxConstraints(
+                  minHeight: WayfareTouch.input,
+                ),
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
