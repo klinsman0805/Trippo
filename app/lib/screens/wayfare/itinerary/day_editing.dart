@@ -208,10 +208,10 @@ class OpenSlotLine extends StatelessWidget {
 
 /// An activity card you can swipe left to act on.
 ///
-/// Reading stays risk-free — nothing happens on a tap or a scroll — but the
-/// two things people do most often are one gesture away instead of behind a
-/// mode. Edit mode still exists for reordering and moving between days, which
-/// a swipe cannot express.
+/// Reading stays risk-free — nothing happens on a scroll — but the two things
+/// people do most often are one gesture away. Tapping the card is the same as
+/// swiping to Edit; the swipe exists so deleting does not require opening the
+/// activity first.
 class SwipeableActivity extends StatelessWidget {
   const SwipeableActivity({
     super.key,
@@ -373,95 +373,6 @@ class _SlidableState extends State<Slidable>
           );
         },
         child: widget.child,
-      ),
-    );
-  }
-}
-
-/// The reorder grip, for moving a card within its own slot.
-///
-/// Ordering across slots is not the user's to set — the slot decides that — so
-/// the grip only ever moves a card among its siblings. Moving to another day
-/// is the `⇅` button's job.
-///
-/// **Two ways to use it, on purpose.** Dragging is the fast one, but a drag is
-/// unreachable by keyboard and awkward with a screen reader, so tapping the
-/// same grip opens an explicit up/down menu. The handoff's accessibility note
-/// requires the second; the first is what most people will actually do.
-class ReorderGrip extends StatelessWidget {
-  const ReorderGrip({
-    super.key,
-    required this.index,
-    required this.positionLabel,
-    required this.canMoveUp,
-    required this.canMoveDown,
-    required this.onMoveUp,
-    required this.onMoveDown,
-  });
-
-  /// Index within the slot — what `ReorderableDragStartListener` needs.
-  final int index;
-
-  /// e.g. "2 of 3 in the morning", read aloud before the menu opens.
-  final String positionLabel;
-
-  final bool canMoveUp;
-  final bool canMoveDown;
-  final VoidCallback onMoveUp;
-  final VoidCallback onMoveDown;
-
-  @override
-  Widget build(BuildContext context) {
-    final lines = SizedBox(
-      width: 28,
-      height: WayfareTouch.ios,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (var i = 0; i < 3; i++) ...[
-            if (i > 0) const SizedBox(height: 3),
-            Container(width: 14, height: 1.5, color: WayfareColors.gripLine),
-          ],
-        ],
-      ),
-    );
-
-    // A single item has nothing to reorder against, so the grip is shown for
-    // alignment but does nothing — an affordance that cannot act is worse than
-    // a quiet one.
-    if (!canMoveUp && !canMoveDown) {
-      return Opacity(opacity: 0.35, child: lines);
-    }
-
-    return Semantics(
-      button: true,
-      label: 'Reorder — $positionLabel',
-      // Delayed, not immediate. An immediate drag competes with the page's own
-      // vertical scroll for the same gesture and loses as often as it wins —
-      // which is why dragging appeared not to work at all. A long press is
-      // something the scroll view cannot claim, so the pick-up is reliable.
-      child: ReorderableDelayedDragStartListener(
-        index: index,
-        child: PopupMenuButton<int>(
-          tooltip: 'Reorder within this part of the day',
-          position: PopupMenuPosition.under,
-          color: WayfareColors.surface,
-          padding: EdgeInsets.zero,
-          itemBuilder: (_) => [
-            PopupMenuItem(
-              value: -1,
-              enabled: canMoveUp,
-              child: const Text('Move up'),
-            ),
-            PopupMenuItem(
-              value: 1,
-              enabled: canMoveDown,
-              child: const Text('Move down'),
-            ),
-          ],
-          onSelected: (delta) => delta < 0 ? onMoveUp() : onMoveDown(),
-          child: lines,
-        ),
       ),
     );
   }

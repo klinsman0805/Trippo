@@ -230,13 +230,16 @@ export function reconcileDays(tripId: string): Plan | null {
   const plan = record.plan;
   ensureBlockIds(plan);
 
+  let changed = healSlots(plan);
+
   const wanted = dates.length;
   const have = plan.itinerary.length;
   // No dates on the trip means nothing to reconcile against — a hand-built
-  // plan with its own days must not be truncated to one.
-  if (!trip.start_date || !trip.end_date) return null;
-
-  let changed = false;
+  // plan with its own days must not be truncated to one. Slots are still
+  // worth healing, so this returns whatever that pass produced.
+  if (!trip.start_date || !trip.end_date) {
+    return changed ? persist(record, plan) : null;
+  }
 
   if (have > wanted) {
     // Trimmed from the end, which is where the removed days are: a shorter
@@ -276,6 +279,45 @@ export function reconcileDays(tripId: string): Plan | null {
   plan.trip.end_date = trip.end_date;
   plan.trip.duration_days = wanted;
   return persist(record, plan);
+}
+
+/**
+ * Which part of the day a clock time falls in.
+ *
+ * Noon and 5 PM, the same boundaries the flight envelope uses. A stated time
+ * is the more specific fact, so it decides the slot rather than sitting beside
+ * it: 9:00 filed under afternoon is not a preference, it is two answers to the
+ * same question.
+ */
+export function slotForTime(hhmm: string): PlanBlock['time_of_day'] {
+  const hour = Number.parseInt(hhmm.split(':')[0] ?? '', 10);
+  if (!Number.isFinite(hour)) return 'anytime';
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  return 'evening';
+}
+
+/**
+ * Re-files every timed activity under the slot its own time implies.
+ *
+ * Runs on read, so activities written before the rule existed — and anything
+ * the planner returns that contradicts itself — are corrected once rather than
+ * shown wrong forever.
+ */
+function healSlots(plan: Plan): boolean {
+  let changed = false;
+  for (const day of plan.itinerary) {
+    for (const block of day.blocks) {
+      if (!block.start_time) continue;
+      const slot = slotForTime(block.start_time);
+      if (block.time_of_day !== slot) {
+        block.time_of_day = slot;
+        changed = true;
+      }
+    }
+    if (changed) sortDay(day.blocks);
+  }
+  return changed;
 }
 
 /** Inclusive list of ISO dates, or a single unnamed day when there are none. */
@@ -342,7 +384,10 @@ export function addBlock(tripId: string, day: number, input: BlockInput): Plan {
 
   target.blocks.push({
     id: newId('blk'),
-    time_of_day: input.time_of_day ?? 'anytime',
+    // A stated time decides the slot; the field is only consulted without one.
+    time_of_day: input.start_time
+      ? slotForTime(input.start_time)
+      : input.time_of_day ?? 'anytime',
     activity: input.activity ?? '',
     description: input.description ?? '',
     location: input.location ?? '',
@@ -373,6 +418,7 @@ export function updateBlock(tripId: string, blockId: string, input: BlockInput):
 
   Object.assign(found.block, {
     ...input,
+    ...(input.start_time ? { time_of_day: slotForTime(input.start_time) } : {}),
     // Editing the planner's work makes it yours; it should stop being replaced
     // behind your back.
     source: 'user',

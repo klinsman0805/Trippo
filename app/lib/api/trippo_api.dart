@@ -480,19 +480,6 @@ class TrippoApi {
     return Plan.fromJson(json['plan'] as Map<String, dynamic>);
   }
 
-  /// Move one activity within its own slot. [toIndex] counts within the slot.
-  Future<Plan> reorderActivity(
-    String tripId,
-    String blockId,
-    int toIndex,
-  ) async {
-    final json = await _client.post(
-      '/trips/$tripId/plan/blocks/$blockId/reorder',
-      body: {'to_index': toIndex},
-    );
-    return Plan.fromJson(json['plan'] as Map<String, dynamic>);
-  }
-
   Future<Plan> moveActivity(
     String tripId,
     String blockId, {

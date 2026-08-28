@@ -406,11 +406,6 @@ class WayfareController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Reorder within a slot. Across slots is [moveActivity]'s job — the slot
-  /// decides that, not the user's finger.
-  Future<void> reorderActivity(String blockId, int toIndex) =>
-      _editPlan(() => _api.reorderActivity(tripId, blockId, toIndex));
-
   Future<void> setPinned(String blockId, bool pinned) =>
       _editPlan(() => _api.setPinned(tripId, blockId, pinned));
 

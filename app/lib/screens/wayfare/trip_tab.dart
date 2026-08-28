@@ -116,11 +116,9 @@ class TripTab extends StatelessWidget {
 
   /// The day's activities, grouped by slot.
   ///
-  /// There is no edit mode: every card is draggable and swipeable all the
-  /// time. Each slot is its own reorderable list, because a drag may only
-  /// rearrange siblings — dragging across a slot boundary would silently
-  /// change what part of the day an activity belongs to, which is the slot's
-  /// decision, not the finger's.
+  /// Order inside a slot is the start time's to decide, not the finger's:
+  /// hand-dragging is out for now, and a card is moved by giving it a time.
+  /// Tapping opens it; swiping left reveals edit and delete.
   List<Widget> _slotGroups(String currency) {
     final blocks = controller.visibleBlocks;
 
@@ -134,14 +132,13 @@ class TripTab extends StatelessWidget {
     return [
       for (final slot in order)
         if (blocks.any((b) => b.timeOfDay == slot))
-          _ReorderableSlot(
+          _SlotGroup(
             key: ValueKey('slot-${controller.selectedDay}-${slot.name}'),
-            slot: slot,
             blocks: blocks.where((b) => b.timeOfDay == slot).toList(),
             members: controller.members,
             currency: currency,
             onEdit: onEditActivity,
-            onReorder: controller.reorderActivity,
+            onRemove: onRemoveActivity,
           ),
     ];
   }
@@ -328,81 +325,44 @@ class _DayChip extends StatelessWidget {
 }
 
 /// One slot's activities, reorderable among themselves.
-class _ReorderableSlot extends StatelessWidget {
-  const _ReorderableSlot({
+class _SlotGroup extends StatelessWidget {
+  const _SlotGroup({
     super.key,
-    required this.slot,
     required this.blocks,
     required this.members,
     required this.currency,
     required this.onEdit,
-    required this.onReorder,
+    required this.onRemove,
   });
 
-  final TimeOfDay slot;
   final List<PlanBlock> blocks;
   final List<Member> members;
   final String currency;
   final ValueChanged<PlanBlock> onEdit;
-  final void Function(String blockId, int toIndex) onReorder;
-
-  static String _slotName(TimeOfDay slot) => switch (slot) {
-        TimeOfDay.morning => 'the morning',
-        TimeOfDay.afternoon => 'the afternoon',
-        TimeOfDay.evening => 'the evening',
-        TimeOfDay.anytime => 'anytime',
-      };
+  final ValueChanged<PlanBlock> onRemove;
 
   @override
   Widget build(BuildContext context) {
-    return ReorderableListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      buildDefaultDragHandles: false,
-      itemCount: blocks.length,
-      // onReorderItem, not onReorder: it hands back the index the item
-      // actually lands on, rather than the pre-removal insertion point that
-      // makes every downward drag one too far.
-      onReorderItem: (from, to) {
-        if (to == from) return;
-        onReorder(blocks[from].id, to);
-      },
-      proxyDecorator: (child, _, animation) => Material(
-        color: Colors.transparent,
-        elevation: 6 * animation.value,
-        borderRadius: WayfareTheme.of(context).card,
-        child: child,
-      ),
-      itemBuilder: (context, i) {
-        final block = blocks[i];
-        return Padding(
-          key: ValueKey(block.id),
-          padding: const EdgeInsets.only(bottom: WayfareSpace.cardGap),
-          child: Row(
-            children: [
-              ReorderGrip(
-                index: i,
-                positionLabel:
-                    '${i + 1} of ${blocks.length} in ${_slotName(slot)}',
-                canMoveUp: i > 0,
-                canMoveDown: i < blocks.length - 1,
-                onMoveUp: () => onReorder(block.id, i - 1),
-                onMoveDown: () => onReorder(block.id, i + 1),
-              ),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => onEdit(block),
-                  child: ActivityCard(
-                    block: block,
-                    members: members,
-                    currency: currency,
-                  ),
+    return Column(
+      children: [
+        for (final block in blocks)
+          Padding(
+            key: ValueKey(block.id),
+            padding: const EdgeInsets.only(bottom: WayfareSpace.cardGap),
+            child: SwipeableActivity(
+              onEdit: () => onEdit(block),
+              onDelete: () => onRemove(block),
+              child: GestureDetector(
+                onTap: () => onEdit(block),
+                child: ActivityCard(
+                  block: block,
+                  members: members,
+                  currency: currency,
                 ),
               ),
-            ],
+            ),
           ),
-        );
-      },
+      ],
     );
   }
 }

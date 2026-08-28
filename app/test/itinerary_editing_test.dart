@@ -639,95 +639,26 @@ void main() {
     });
   });
 
-  group('Reordering within a slot', () {
-    testWidgets('the grip offers an explicit menu, not only a drag',
-        (tester) async {
-      final controller = editableController();
-
-      await pump(tester, dayFor(controller));
-
-      // Drag is unreachable by keyboard and awkward with a screen reader, so
-      // the same grip has to work by tapping.
-      expect(find.byType(ReorderGrip), findsNWidgets(3));
-      await tapDown(tester, find.byType(ReorderGrip).first);
-
-      expect(find.text('Move down'), findsOneWidget);
-      expect(find.text('Move up'), findsOneWidget);
-    });
-
-    testWidgets('the first item cannot move up, the last cannot move down',
+  group('Order within a slot', () {
+    testWidgets('is the start time\'s to decide, not the finger\'s',
         (tester) async {
       final controller = editableController();
       await pump(tester, dayFor(controller));
 
-      await tapDown(tester, find.byType(ReorderGrip).first);
-      final up = tester.widget<PopupMenuItem<int>>(
-        find.widgetWithText(PopupMenuItem<int>, 'Move up'),
-      );
-      expect(up.enabled, isFalse);
-      final down = tester.widget<PopupMenuItem<int>>(
-        find.widgetWithText(PopupMenuItem<int>, 'Move down'),
-      );
-      expect(down.enabled, isTrue);
+      // Hand-dragging is out: the grip lost its gesture to the page's own
+      // scroll often enough that it read as broken, and an order the times
+      // contradict is worse than no order at all. A card moves by being
+      // given a time.
+      expect(find.byType(ReorderableListView), findsNothing);
+      expect(find.byType(ReorderableDelayedDragStartListener), findsNothing);
     });
 
-    testWidgets('each slot reorders separately, so a drag cannot cross slots',
+    testWidgets('every card can still be swiped to edit or delete',
         (tester) async {
       final controller = editableController();
       await pump(tester, dayFor(controller));
 
-      // Two morning activities and one afternoon → two independent lists.
-      expect(find.byType(ReorderableListView), findsNWidgets(2));
-    });
-
-    testWidgets('a lone activity in a slot has nothing to reorder against',
-        (tester) async {
-      final controller = editableController(morningCount: 1);
-      await pump(tester, dayFor(controller));
-
-      // Both slots hold one thing, so every grip is inert rather than
-      // offering an action that would do nothing.
-      final grips = tester.widgetList<ReorderGrip>(find.byType(ReorderGrip));
-      expect(grips.every((g) => !g.canMoveUp && !g.canMoveDown), isTrue);
-    });
-
-    testWidgets('the grip is a long-press handle wired to its slot',
-        (tester) async {
-      final controller = editableController(morningCount: 3);
-      await pump(tester, dayFor(controller));
-
-      // Long-press rather than immediate drag. An immediate drag competes
-      // with the page's own vertical scroll for the same gesture and loses
-      // more often than it wins, which is why dragging did nothing on a
-      // device. A long press is not something a scroll view can claim.
-      //
-      // The gesture itself cannot be driven by the test harness — a delayed
-      // multi-drag does not fire from a synthetic pointer — so this asserts
-      // the wiring, and the menu below is the path that is proven end to end.
-      // Three morning cards can be reordered against each other; the lone
-      // afternoon one has nothing to move past, so its grip stays inert.
-      expect(
-        find.byType(ReorderableDelayedDragStartListener),
-        findsNWidgets(3),
-      );
-      expect(find.byType(ReorderableDragStartListener), findsNothing);
-
-      final lists = tester.widgetList<ReorderableListView>(
-        find.byType(ReorderableListView),
-      );
-      expect(lists.length, 2, reason: 'one list per occupied slot');
-      expect(lists.every((l) => l.onReorderItem != null), isTrue);
-    });
-
-    testWidgets('grips are always there — there is no mode to enter',
-        (tester) async {
-      final controller = editableController();
-      await pump(tester, dayFor(controller));
-
-      // Rearranging is not a mode you switch into; it is just how the list
-      // behaves.
-      expect(find.byType(ReorderGrip), findsNWidgets(3));
-      expect(find.byType(ReorderableListView), findsNWidgets(2));
+      expect(find.byType(SwipeableActivity), findsNWidgets(3));
     });
   });
 
