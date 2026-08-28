@@ -680,73 +680,105 @@ class _ShortDayBandState extends State<ShortDayBand> {
     final theme = WayfareTheme.of(context);
     final short = widget.short;
 
-    return Semantics(
-      button: true,
-      expanded: _open,
-      child: Material(
-        color: WayfareColors.amberSurface,
-        borderRadius: theme.cardLg,
-        child: InkWell(
-          onTap: () => setState(() => _open = !_open),
-          borderRadius: theme.cardLg,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-            decoration: BoxDecoration(
-              borderRadius: theme.cardLg,
-              border: Border.all(color: WayfareColors.amberBorder, width: 1.5),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Semantics(
+        button: true,
+        expanded: _open,
+        child: Material(
+          color: WayfareColors.amberSurface,
+          // The border belongs to the Material, not to a child inside it —
+          // on the child, the amber fill spilled past the outline.
+          shape: RoundedRectangleBorder(
+            borderRadius: theme.cardLg,
+            side: const BorderSide(
+              color: WayfareColors.amberBorder,
+              width: 1.5,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          WayfareEyebrow(
-                            ['Short day', ?widget.flightLabel].join(' · '),
-                            color: WayfareColors.amberInkDeep,
-                            size: 11.5,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _headline(),
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w500,
-                              height: 1.3,
-                              color: WayfareColors.ink,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            WayfareEyebrow(
+                              ['Short day', ?widget.flightLabel].join(' · '),
+                              color: WayfareColors.amberInkDeep,
+                              size: 11.5,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _headline(),
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w500,
+                                height: 1.3,
+                                color: WayfareColors.ink,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      AnimatedRotation(
+                        turns: _open ? 0.5 : 0,
+                        duration: _duration,
+                        curve: _curve,
+                        child: const Icon(
+                          Icons.expand_more,
+                          size: 20,
+                          color: WayfareColors.amberInkDeep,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Grows from the top edge and fades in as it goes, so the
+                  // cards below are pushed rather than jumped.
+                  ClipRect(
+                    child: AnimatedAlign(
+                      alignment: Alignment.topLeft,
+                      heightFactor: _open ? 1 : 0,
+                      duration: _duration,
+                      curve: _curve,
+                      child: AnimatedOpacity(
+                        opacity: _open ? 1 : 0,
+                        duration: _duration,
+                        curve: _curve,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 8, right: 4),
+                          child: Text(
+                            '${short.note} The planner left the rest out '
+                            'rather than pretending it exists.',
+                            style: WayfareType.body(
+                              13.5,
+                              color: WayfareColors.amberInk,
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      _open ? Icons.expand_less : Icons.expand_more,
-                      size: 20,
-                      color: WayfareColors.amberInkDeep,
-                    ),
-                  ],
-                ),
-                if (_open) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    '${short.note} The planner left the rest out rather than '
-                    'pretending it exists.',
-                    style: WayfareType.body(13.5, color: WayfareColors.amberInk),
                   ),
                 ],
-              ],
+              ),
             ),
           ),
         ),
       ),
     );
   }
+
+  static const _duration = Duration(milliseconds: 240);
+  static const _curve = Curves.easeOutCubic;
 
   String _headline() {
     final short = widget.short;

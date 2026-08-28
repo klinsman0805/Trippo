@@ -328,14 +328,21 @@ void main() {
         findsOneWidget,
       );
       // The explanation is worth reading once, so it stays folded away until
-      // asked for — the headline above already carries the finding.
-      expect(find.textContaining('rather than pretending it exists'),
-          findsNothing);
-      await tester.tap(find.byType(ShortDayBand));
-      await tester.pumpAndSettle();
+      // asked for — the headline above already carries the finding. It is
+      // collapsed to nothing rather than removed, so that expanding can
+      // animate; measure the band rather than looking for the widget.
       expect(
         find.textContaining('rather than pretending it exists'),
         findsOneWidget,
+      );
+      final collapsed = tester.getSize(find.byType(ShortDayBand)).height;
+
+      await tester.tap(find.byType(ShortDayBand));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSize(find.byType(ShortDayBand)).height,
+        greaterThan(collapsed),
       );
       // The band explains the constraint; it does not also try to sell a
       // different flight from inside the itinerary.
