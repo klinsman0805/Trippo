@@ -77,6 +77,130 @@ class WayfareSheetGrabber extends StatelessWidget {
   }
 }
 
+/// Drag-to-dismiss for a sheet whose body scrolls.
+///
+/// `showModalBottomSheet`'s own drag loses the gesture arena to any scroll
+/// view inside it, so at the top of a sheet the one gesture everyone reaches
+/// for to close it does nothing. This watches raw pointers instead of entering
+/// the arena: a downward drag moves the sheet when the body is already at the
+/// top, or whenever it starts on the grabber, and is ignored while there is
+/// still content above. The body scrolls with clamping physics so it cannot
+/// bounce underneath the drag.
+///
+/// [builder] must attach the given controller to its scroll view and put a
+/// [WayfareSheetGrabber] at the top of the card.
+class WayfareDismissibleSheet extends StatefulWidget {
+  const WayfareDismissibleSheet({super.key, required this.builder});
+
+  final Widget Function(BuildContext context, ScrollController controller)
+      builder;
+
+  @override
+  State<WayfareDismissibleSheet> createState() =>
+      _WayfareDismissibleSheetState();
+}
+
+class _WayfareDismissibleSheetState extends State<WayfareDismissibleSheet>
+    with SingleTickerProviderStateMixin {
+  final ScrollController _scroll = ScrollController();
+  late final AnimationController _snapBack = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 200),
+  )
+    ..addListener(() => setState(() {}))
+    ..addStatusListener((status) {
+      if (status == AnimationStatus.completed) _drag = 0;
+    });
+
+  /// How far the sheet has been pulled down, in logical pixels.
+  double _drag = 0;
+  double _snapFrom = 0;
+  double _startY = 0;
+  double _lastY = 0;
+  Duration _lastAt = Duration.zero;
+  double _velocity = 0;
+  bool _tracking = false;
+
+  /// Below this the drag springs back; past it the sheet closes.
+  static const _closeAt = 96.0;
+  static const _flingAt = 700.0;
+
+  /// The grabber strip: 10 above the bar, the 4px bar, 12 below.
+  static const _grabberHeight = 30.0;
+
+  @override
+  void dispose() {
+    _snapBack.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  bool get _atTop => !_scroll.hasClients || _scroll.offset <= 0.5;
+
+  void _down(PointerDownEvent event) {
+    _snapBack.stop();
+    _startY = event.position.dy;
+    _lastY = _startY;
+    _lastAt = event.timeStamp;
+    _velocity = 0;
+    // The grabber exists to close the sheet, so a drag starting there works
+    // however far the body has been scrolled.
+    _tracking = event.localPosition.dy <= _grabberHeight || _atTop;
+  }
+
+  void _move(PointerMoveEvent event) {
+    // A drag that began mid-list becomes eligible the moment the list runs
+    // out of scroll, rather than needing the finger lifted and put down.
+    if (!_tracking) {
+      if (!_atTop) return;
+      _tracking = true;
+      _startY = event.position.dy - _drag;
+    }
+
+    final elapsed = (event.timeStamp - _lastAt).inMicroseconds;
+    if (elapsed > 0) {
+      _velocity = (event.position.dy - _lastY) / elapsed * 1e6;
+    }
+    _lastY = event.position.dy;
+    _lastAt = event.timeStamp;
+
+    final next = event.position.dy - _startY;
+    // Upward drags belong to the scroll view, not to us.
+    if (next <= 0 && _drag == 0) return;
+    setState(() => _drag = next.clamp(0.0, double.infinity));
+  }
+
+  void _up([PointerEvent? _]) {
+    if (!_tracking) return;
+    _tracking = false;
+    if (_drag >= _closeAt || _velocity >= _flingAt) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    if (_drag == 0) return;
+    _snapFrom = _drag;
+    _snapBack.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final offset = _snapBack.isAnimating
+        ? _snapFrom * (1 - Curves.easeOutCubic.transform(_snapBack.value))
+        : _drag;
+
+    return Listener(
+      onPointerDown: _down,
+      onPointerMove: _move,
+      onPointerUp: _up,
+      onPointerCancel: _up,
+      child: Transform.translate(
+        offset: Offset(0, offset),
+        child: widget.builder(context, _scroll),
+      ),
+    );
+  }
+}
+
 /// A 999-radius pill with a border — the OPTIONAL badge, conflict tags, pace
 /// chips. Sizes vary per use, so they're parameters rather than variants.
 class WayfarePill extends StatelessWidget {

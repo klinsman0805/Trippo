@@ -77,14 +77,17 @@ class SheetFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = WayfareTheme.of(context);
     final viewInsets = MediaQuery.viewInsetsOf(context).bottom;
+    // The card runs to the bottom edge — a SafeArea around it left a strip of
+    // barrier showing underneath — so the home indicator is cleared from
+    // inside, by the content's own padding.
+    final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
 
     // No Align: showModalBottomSheet already docks this to the bottom, and
     // filling the screen meant every tap above the card landed on a
     // transparent area instead of the barrier — leaving no way out but the
     // buttons.
-    return SafeArea(
-      top: false,
-      child: ConstrainedBox(
+    return WayfareDismissibleSheet(
+      builder: (context, scrollController) => ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.9,
         ),
@@ -110,7 +113,16 @@ class SheetFrame extends StatelessWidget {
               const WayfareSheetGrabber(),
               Flexible(
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(18, 0, 18, 46 + viewInsets),
+                  controller: scrollController,
+                  // Clamping so the body cannot bounce out from under a
+                  // drag that is meant to be closing the sheet.
+                  physics: const ClampingScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    18,
+                    0,
+                    18,
+                    46 + viewInsets + safeBottom,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     mainAxisSize: MainAxisSize.min,

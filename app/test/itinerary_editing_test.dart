@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trippo/api/api_client.dart';
 import 'package:trippo/api/trippo_api.dart';
 import 'package:trippo/design/theme.dart';
+import 'package:trippo/design/widgets.dart';
 import 'package:trippo/models/plan.dart';
 import 'package:trippo/models/trip.dart';
 import 'package:trippo/state/wayfare_controller.dart';
@@ -340,6 +341,98 @@ void main() {
 
       expect(saved!['time_of_day'], 'evening');
       expect(saved!['start_time'], isNull);
+    });
+  });
+
+  group('Closing a sheet by dragging it down', () {
+    /// Opens the sheet the way the app does — as a real modal route, so that
+    /// dismissing it is the route popping rather than a callback firing.
+    Future<void> openSheet(WidgetTester tester, {PlanBlock? existing}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, inner) => WayfareTheme(
+            platform: WayfarePlatform.ios,
+            child: inner ?? const SizedBox.shrink(),
+          ),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => ActivitySheet(
+                      day: 1,
+                      existing: existing,
+                      onSave: (_) {},
+                      onCancel: () {},
+                    ),
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivitySheet), findsOneWidget);
+    }
+
+    testWidgets('a pull on the grabber closes it', (tester) async {
+      await openSheet(tester);
+
+      await tester.drag(find.byType(WayfareSheetGrabber), const Offset(0, 220));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ActivitySheet), findsNothing);
+    });
+
+    testWidgets('a pull from the body closes it when already at the top',
+        (tester) async {
+      await openSheet(tester);
+
+      await tester.drag(find.text('Part of the day'), const Offset(0, 220));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ActivitySheet), findsNothing);
+    });
+
+    testWidgets('a short pull springs back instead', (tester) async {
+      await openSheet(tester);
+
+      await tester.drag(find.byType(WayfareSheetGrabber), const Offset(0, 30));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ActivitySheet), findsOneWidget);
+      // And back where it started, not left hanging 30px down.
+      expect(
+        tester.widget<Transform>(
+          find
+              .descendant(
+                of: find.byType(WayfareDismissibleSheet),
+                matching: find.byType(Transform),
+              )
+              .first,
+        ).transform.getTranslation().y,
+        0,
+      );
+    });
+
+    testWidgets('a pull mid-list scrolls the body and leaves the sheet open',
+        (tester) async {
+      await openSheet(tester);
+
+      // Scroll down so there is content above, then pull down: that is the
+      // list's gesture, not the sheet's.
+      await tester.drag(find.text('Venue'), const Offset(0, -160));
+      await tester.pumpAndSettle();
+      await tester.drag(find.text('Venue'), const Offset(0, 60));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ActivitySheet), findsOneWidget);
     });
   });
 
