@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/trippo_api.dart';
+import '../design/features.dart';
 import '../design/theme.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
@@ -181,8 +182,8 @@ class _TripListScreenState extends State<TripListScreen> {
               Text('No trips yet', style: WayfareType.display(24)),
               const SizedBox(height: 9),
               Text(
-                'Tap + to start one. Add who is coming, and the planner takes '
-                'it from there.',
+                'Tap + to start one. Say where you are going, and the planner '
+                'takes it from there.',
                 textAlign: TextAlign.center,
                 style: WayfareType.body(13.5, color: WayfareColors.subhead),
               ),
@@ -260,17 +261,19 @@ class _TripTile extends StatelessWidget {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 4),
-                    Text(
-                      trip.memberCount == 0
-                          ? 'No travellers yet'
-                          : '${trip.memberCount} '
-                                '${trip.memberCount == 1 ? 'traveller' : 'travellers'}',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: WayfareColors.faint,
+                    if (WayfareFeatures.groups) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        trip.memberCount == 0
+                            ? 'No travellers yet'
+                            : '${trip.memberCount} '
+                                  '${trip.memberCount == 1 ? 'traveller' : 'travellers'}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: WayfareColors.faint,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -300,7 +303,7 @@ class _TripTile extends StatelessWidget {
   /// rather than asking a bare "are you sure?".
   Future<void> _confirmDelete(BuildContext context) async {
     final losses = [
-      if (trip.memberCount > 0)
+      if (WayfareFeatures.groups && trip.memberCount > 0)
         '${trip.memberCount} '
             "${trip.memberCount == 1 ? "traveller's" : "travellers'"} "
             'preferences',

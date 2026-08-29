@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../design/features.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
 import '../../state/wayfare_controller.dart';
@@ -287,12 +288,18 @@ class WayfareNavBar extends StatelessWidget {
   final WayfareTab current;
   final ValueChanged<WayfareTab> onSelect;
 
-  static const _items = <(WayfareTab, String, IconData)>[
+  static const _all = <(WayfareTab, String, IconData)>[
     (WayfareTab.itinerary, 'Trip', Icons.map_outlined),
     (WayfareTab.budget, 'Budget', Icons.pie_chart_outline),
     (WayfareTab.group, 'Group', Icons.people_outline),
     (WayfareTab.chat, 'Refine', Icons.auto_awesome_outlined),
   ];
+
+  /// Group is dropped rather than disabled: a tab you cannot use is worse
+  /// than a tab that is not there.
+  static List<(WayfareTab, String, IconData)> get _items => WayfareFeatures.groups
+      ? _all
+      : _all.where((i) => i.$1 != WayfareTab.group).toList();
 
   @override
   Widget build(BuildContext context) {

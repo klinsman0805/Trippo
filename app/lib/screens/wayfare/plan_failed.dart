@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../design/features.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
 import '../../design/widgets.dart';
@@ -113,7 +114,8 @@ class PlanFailedView extends StatelessWidget {
 
     if (revision == null) {
       return 'Nothing was planned before it stopped. Everything you entered — '
-          'travellers, dates, saved places — is still here.';
+          '${WayfareFeatures.groups ? 'travellers, ' : ''}dates, saved places '
+          '— is still here.';
     }
 
     final scope = days == null

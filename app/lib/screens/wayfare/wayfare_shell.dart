@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' hide TimeOfDay;
 
 import '../../api/trippo_api.dart';
+import '../../design/features.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
 import '../../design/widgets.dart';
@@ -101,12 +102,8 @@ class _WayfareShellState extends State<WayfareShell> {
           title: _title(),
           subtitle: _subtitle(),
           actionIcon: _actionIcon(),
-          actionLabel: _controller.tab == WayfareTab.group
-              ? 'Add traveller'
-              : 'Trip options',
-          onAction: _controller.tab == WayfareTab.group
-              ? _controller.openSheet
-              : _openTripOptions,
+          actionLabel: _onGroupTab ? 'Add traveller' : 'Trip options',
+          onAction: _onGroupTab ? _controller.openSheet : _openTripOptions,
           // Adding is its own affordance rather than a row at the end of the
           // day, which is the point at which it is furthest from the thumb.
           secondaryActionIcon:
@@ -203,12 +200,15 @@ class _WayfareShellState extends State<WayfareShell> {
         title: _controller.tab == WayfareTab.budget
             ? 'No numbers yet'
             : 'No itinerary yet',
-        note: _controller.members.isEmpty
-            ? 'Generate one whenever you like. Adding travellers first makes '
-                'the plan fit the group, but it is not required.'
-            : 'You have ${_controller.members.length} '
-                '${_controller.members.length == 1 ? 'traveller' : 'travellers'} '
-                'ready. Generate and this fills in.',
+        note: !WayfareFeatures.groups
+            ? 'Generate one whenever you like, or write the first activity '
+                'yourself.'
+            : _controller.members.isEmpty
+                ? 'Generate one whenever you like. Adding travellers first '
+                    'makes the plan fit the group, but it is not required.'
+                : 'You have ${_controller.members.length} '
+                    '${_controller.members.length == 1 ? 'traveller' : 'travellers'} '
+                    'ready. Generate and this fills in.',
         canGenerate: _controller.canGenerate,
         onGenerate: _controller.generate,
         memberCount: _controller.members.length,
@@ -747,9 +747,13 @@ class _WayfareShellState extends State<WayfareShell> {
   /// The Trip tab used a refresh icon, which promised a reload and delivered a
   /// menu. The icon has to describe what the button does, not what the tab is
   /// about — regenerating lives inside the menu, where it is labelled.
-  IconData _actionIcon() => _controller.tab == WayfareTab.group
-      ? Icons.add
-      : Icons.more_horiz;
+  IconData _actionIcon() => _onGroupTab ? Icons.add : Icons.more_horiz;
+
+  /// Group is behind [WayfareFeatures.groups]. Reading the flag through the
+  /// tab check keeps every group branch in one shape, so none of them can be
+  /// missed when it comes back.
+  bool get _onGroupTab =>
+      WayfareFeatures.groups && _controller.tab == WayfareTab.group;
 }
 
 /// Full-frame overlay while the planner runs. Real calls take minutes, so the
@@ -792,7 +796,12 @@ class GeneratingOverlay extends StatelessWidget {
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 250),
                     child: Text(
-                      note ?? 'Balancing everyone\'s preferences. This takes a minute.',
+                      note ??
+                          (WayfareFeatures.groups
+                              ? 'Balancing everyone\'s preferences. This takes '
+                                  'a minute.'
+                              : 'Working through your days. This takes a '
+                                  'minute.'),
                       textAlign: TextAlign.center,
                       style: WayfareType.body(
                         14,
@@ -871,7 +880,7 @@ class _NoDatesYet extends StatelessWidget {
             cta: 'Set dates myself',
             onTap: onSetDatesByHand,
           ),
-          if (memberCount == 0) ...[
+          if (WayfareFeatures.groups && memberCount == 0) ...[
             const SizedBox(height: WayfareSpace.sectionGap),
             Text(
               'You can add travellers whenever you like — the plan gets more '
@@ -1026,7 +1035,7 @@ class _BlankState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: WayfareType.body(12.5, color: WayfareColors.mutedLight),
             ),
-          if (memberCount < 2) ...[
+          if (WayfareFeatures.groups && memberCount < 2) ...[
             const SizedBox(height: 10),
             WayfareSecondaryButton(
               label: memberCount == 0

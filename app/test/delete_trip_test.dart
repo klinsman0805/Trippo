@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:http/http.dart' as http;
 import 'package:trippo/api/api_client.dart';
 import 'package:trippo/api/trippo_api.dart';
+import 'package:trippo/design/features.dart';
 import 'package:trippo/design/theme.dart';
 import 'package:trippo/screens/trip_list_screen.dart';
 
@@ -70,7 +71,10 @@ void main() {
 
     expect(find.text('Delete Portugal, Slowly?'), findsOneWidget);
     // The stakes are the cascade, not the one row the icon sits beside.
-    expect(find.textContaining("3 travellers' preferences"), findsOneWidget);
+    expect(
+      find.textContaining("3 travellers' preferences"),
+      WayfareFeatures.groups ? findsOneWidget : findsNothing,
+    );
     expect(find.textContaining('every plan it has produced'), findsOneWidget);
     expect(find.textContaining('cannot be undone'), findsOneWidget);
 
@@ -131,6 +135,9 @@ void main() {
     await tester.tap(find.byIcon(Icons.delete_outline));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining("1 traveller's preferences"), findsOneWidget);
+    expect(
+      find.textContaining("1 traveller's preferences"),
+      WayfareFeatures.groups ? findsOneWidget : findsNothing,
+    );
   });
 }

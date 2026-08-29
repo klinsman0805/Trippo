@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trippo/api/api_client.dart';
 import 'package:trippo/api/trippo_api.dart';
+import 'package:trippo/design/features.dart';
 import 'package:trippo/design/theme.dart';
 import 'package:trippo/design/widgets.dart';
 import 'package:trippo/models/plan.dart';
@@ -143,8 +144,7 @@ Widget dayFor(WayfareController controller) => TripTab(
 
 void main() {
   group('The activity card', () {
-    testWidgets('a hand-written one is marked, a planned one is not',
-        (tester) async {
+    testWidgets('the YOURS mark is off with groups', (tester) async {
       await pump(
         tester,
         Column(
@@ -163,9 +163,13 @@ void main() {
         ),
       );
 
-      // Exactly one Yours pill — the mark is the only difference between a
-      // hand-written activity and a generated one.
-      expect(find.text('YOURS'), findsOneWidget);
+      // The mark separates a hand-written activity from a generated one,
+      // which is a distinction only worth drawing when somebody else could
+      // have written it. Solo, both cards read the same.
+      expect(
+        find.text('YOURS'),
+        WayfareFeatures.groups ? findsOneWidget : findsNothing,
+      );
     });
 
     testWidgets('a stated time prints, a missing one leaves no gap',

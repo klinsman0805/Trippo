@@ -72,7 +72,7 @@ class _StatusHero extends StatelessWidget {
           Text(
             over
                 ? 'Lodging and activities pushed it. Dropping a couple of optional stops covers the gap.'
-                : 'Comfortably inside the group budget, with the buffer intact.',
+                : 'Comfortably inside the budget, with the buffer intact.',
             style: WayfareType.body(13.5, color: WayfareColors.inkSecondary),
           ),
           const SizedBox(height: 16),

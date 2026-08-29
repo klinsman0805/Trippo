@@ -2,6 +2,8 @@ import 'package:flutter/material.dart' hide TimeOfDay;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trippo/api/api_client.dart';
 import 'package:trippo/api/trippo_api.dart';
+import 'package:trippo/design/features.dart';
+import 'package:trippo/screens/wayfare/shell_chrome.dart';
 import 'package:trippo/design/theme.dart';
 import 'package:trippo/design/tokens.dart';
 import 'package:trippo/design/widgets.dart';
@@ -246,7 +248,7 @@ void main() {
       expect(find.text('Show optional activities'), findsOneWidget);
     });
 
-    testWidgets('a block for a subset of members names them, not "Everyone"',
+    testWidgets('who a block suits is not shown with groups off',
         (tester) async {
       final controller = buildController(
         members: const [_maya, _diego, _ruth],
@@ -259,8 +261,13 @@ void main() {
           onRemoveActivity: (_) {},
         ));
 
-      // The morning block covers 2 of 3 travellers → names, not "Everyone".
-      expect(find.text('Maya, Ruth'), findsOneWidget);
+      // The morning block covers 2 of 3 travellers, so with groups on it
+      // names them rather than saying "Everyone". Off, the footer drops the
+      // avatar stack entirely.
+      expect(
+        find.text('Maya, Ruth'),
+        WayfareFeatures.groups ? findsOneWidget : findsNothing,
+      );
       expect(find.text('Everyone'), findsNothing);
     });
 
@@ -481,6 +488,25 @@ void main() {
           expect(captured.sendButtonColor, WayfareColors.accent);
         }
       }
+    });
+  });
+
+  group('The groups flag', () {
+    testWidgets('drops the Group tab from the nav rather than disabling it',
+        (tester) async {
+      await pumpTab(
+        tester,
+        WayfareNavBar(current: WayfareTab.itinerary, onSelect: (_) {}),
+      );
+
+      expect(find.text('Trip'), findsOneWidget);
+      expect(find.text('Budget'), findsOneWidget);
+      expect(find.text('Refine'), findsOneWidget);
+      // A tab you cannot use is worse than a tab that is not there.
+      expect(
+        find.text('Group'),
+        WayfareFeatures.groups ? findsOneWidget : findsNothing,
+      );
     });
   });
 }

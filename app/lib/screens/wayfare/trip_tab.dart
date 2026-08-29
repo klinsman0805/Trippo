@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' hide TimeOfDay;
 
+import '../../design/features.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
 import '../../design/widgets.dart';
@@ -390,10 +391,14 @@ class ActivityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = WayfareTheme.of(context);
-    final fit = block.suitedForMembers
-        .map((id) => members.indexWhere((m) => m.id == id))
-        .where((i) => i >= 0)
-        .toList();
+    // Who an activity suits is a group fact; on a solo trip the footer falls
+    // back to duration and place.
+    final fit = WayfareFeatures.groups
+        ? block.suitedForMembers
+            .map((id) => members.indexWhere((m) => m.id == id))
+            .where((i) => i >= 0)
+            .toList()
+        : const <int>[];
 
     final card = Container(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
@@ -498,7 +503,7 @@ class ActivityCard extends StatelessWidget {
           ),
         ),
         if (block.optional) WayfarePill.optional(),
-        if (block.isMine) WayfarePill.yours(),
+        if (WayfareFeatures.groups && block.isMine) WayfarePill.yours(),
       ],
     );
   }
