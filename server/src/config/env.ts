@@ -29,7 +29,7 @@ const EnvSchema = z.object({
   // Planner (Google Gemini). Without this the /plan endpoints return 503.
   // Free keys come from https://aistudio.google.com/apikey
   GEMINI_API_KEY: z.string().optional(),
-  PLANNER_MODEL: z.string().default('gemini-3.7-flash'),
+  PLANNER_MODEL: z.string().default('gemini-3.5-flash-lite'),
   /**
    * How long to wait on one model call before giving up, in milliseconds.
    *
@@ -38,7 +38,11 @@ const EnvSchema = z.object({
    * eventually abandons while the server is still working on it.
    */
   PLANNER_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
-  PLANNER_EFFORT: z.enum(['minimal', 'low', 'medium', 'high']).default('high'),
+  /**
+   * Note that not every model accepts every level — the 3.5 family rejects
+   * 'minimal' with a 400 — so this is validated by the provider, not here.
+   */
+  PLANNER_EFFORT: z.enum(['minimal', 'low', 'medium', 'high']).default('low'),
   /** Cheaper model for mechanical work like pulling places out of a page. */
   EXTRACTION_MODEL: z.string().default('gemini-3.5-flash-lite'),
 

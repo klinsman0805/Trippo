@@ -78,6 +78,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     checked_at: new Date().toISOString(),
     features: {
       planner: features.planner,
+      // Named for the same reason the schedule provider is: a run that is slow,
+      // or refused for quota, is the model's identity being relevant — and
+      // there is otherwise no way to see which one is configured.
+      planner_model: env.PLANNER_MODEL,
+      planner_effort: env.PLANNER_EFFORT,
       maps: features.maps,
       flights: features.flights,
       transit: features.maps,
