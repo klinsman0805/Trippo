@@ -37,9 +37,15 @@ String formatMoney(num value, String currency) {
   return '$sign$symbol$space$grouped';
 }
 
-/// A block's cost cell: an amount, or "free" when there's nothing to pay.
+/// A block's cost cell: an amount, "free", or nothing at all.
+///
+/// Null and zero are different answers and used to print the same word. The
+/// planner is now told that null is a better answer than an invented number,
+/// so "free" on an unpriced museum would be the app asserting something the
+/// model explicitly declined to say.
 String formatBlockCost(num? value, String currency) {
-  if (value == null || value == 0) return 'free';
+  if (value == null) return '';
+  if (value == 0) return 'free';
   return '${formatMoney(value, currency)} pp';
 }
 

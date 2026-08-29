@@ -283,6 +283,17 @@ void main() {
     });
   });
 
+  group('An unpriced activity', () {
+    test('is not the same as a free one', () {
+      // The planner is told null is a better answer than an invented number,
+      // so printing "free" for one would be the app asserting a fact the
+      // model explicitly declined to give.
+      expect(formatBlockCost(null, 'MYR'), '');
+      expect(formatBlockCost(0, 'MYR'), 'free');
+      expect(formatBlockCost(45, 'MYR'), 'RM 45 pp');
+    });
+  });
+
   group('Where an activity came from', () {
     testWidgets('a card names the link it traces back to', (tester) async {
       await pump(

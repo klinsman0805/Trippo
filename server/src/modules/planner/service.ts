@@ -2,14 +2,19 @@ import { db, newId, nowIso } from '../../db/index.js';
 import { env } from '../../config/env.js';
 import { structuredCall } from '../../lib/llm.js';
 import { notFound, unprocessable } from '../../lib/errors.js';
-import { PLAN_JSON_SCHEMA, PlanSchema, type Plan } from '../../schemas/plan.js';
+import type { Plan } from '../../schemas/plan.js';
+import {
+  DraftSchema,
+  PLAN_DRAFT_JSON_SCHEMA,
+  type PlanDraft,
+} from '../../schemas/plan-draft.js';
 import { listSelections } from '../flights/index.js';
 import { listSources } from '../ingest/service.js';
 import { listPlaces } from '../trips/places.repo.js';
-import type { Place } from '../../schemas/trip.js';
 import { getTrip, touchTrip } from '../trips/repo.js';
 import { ensureBlockIds, pinnedSummary, sortDay } from './blocks.js';
-import { buildPlannerContext, placeTag } from './context.js';
+import { buildPlannerContext } from './context.js';
+import { hydrate, toDraftView } from './hydrate.js';
 import { clearFailure, recordFailure } from './failure.js';
 import { VOYAGER_SYSTEM_PROMPT } from './prompt.js';
 
@@ -63,10 +68,8 @@ export async function generatePlan(
   // rather than starts over — otherwise day 5 silently changes when the user
   // only asked about day 3.
   if (previous && userRequest) {
-    context += `\n\n## CURRENT PLAN (revision ${previous.revision})\nThis is the plan you produced previously. Apply the requested change and return the complete updated plan, keeping everything else stable unless the change requires otherwise.\n\n${JSON.stringify(
-      previous.plan,
-      null,
-      2,
+    context += `\n\n## CURRENT PLAN (revision ${previous.revision})\nThis is the itinerary you produced previously, in the same shape you are being asked to return. Apply the requested change and return the complete updated plan, keeping everything else stable unless the change requires otherwise.\n\n${JSON.stringify(
+      toDraftView(previous.plan, places),
     )}`;
   }
 
@@ -74,9 +77,18 @@ export async function generatePlan(
   // and an answered question produce the same recoverable state as a first
   // attempt — the failed screen should never depend on which door you came in.
   const startedAt = Date.now();
+  const sourceTitles = new Map(
+    listSources(tripId).map((s) => [s.id, s.title ?? s.url ?? 'a pasted note']),
+  );
+
   let plan: Plan;
   try {
-    plan = await callPlanner(context, trip.members.map((m) => m.id));
+    const draft = await callPlanner(context, trip.members.map((m) => m.id));
+    // Everything the model was not asked for is put back here — the trip's own
+    // identity, the member profiles, the totals, and each cited place's name,
+    // venue and reason. Nothing downstream can tell a hydrated plan from one
+    // the model wrote in full.
+    plan = hydrate(draft, trip, places, sourceTitles);
   } catch (err) {
     recordFailure(tripId, err, {
       elapsedMs: Date.now() - startedAt,
@@ -86,103 +98,9 @@ export async function generatePlan(
     throw err;
   }
 
-  attributePlaces(plan, places, tripId);
-
   const record = savePlan(tripId, reinstatePinned(plan, pinned), userRequest);
   clearFailure(tripId);
   return record;
-}
-
-/**
- * Records which saved place each block came from, so a card can say so.
- *
- * Two passes, both of which check our own data rather than believing the
- * model: the tag it cited is looked up in the list we gave it, and anything
- * uncited is matched by name against the same list. A citation the traveller
- * can see has to be a fact — "from the 小红书 post you saved" is a claim about
- * provenance, and getting it wrong is worse than saying nothing.
- */
-function attributePlaces(plan: Plan, places: Place[], tripId: string): void {
-  const byTag = new Map(places.map((p, i) => [placeTag(i), p]));
-  // Names are matched case- and punctuation-insensitively, and a place is
-  // keyed under its alternative names too: the model writes "Wong Ah Wah"
-  // where the post said "Wong Ah Wah (Ming Ji Grilled Fish)" more often than
-  // not, and the full string would then never appear in the block.
-  const byName = new Map<string, Place>();
-  for (const place of places) {
-    for (const alias of aliases(place.name)) {
-      byName.set(alias, place);
-    }
-  }
-  const sourceTitles = new Map(
-    listSources(tripId).map((s) => [s.id, s.title ?? s.url ?? 'a pasted note']),
-  );
-
-  for (const day of plan.itinerary) {
-    for (const block of day.blocks) {
-      const cited = block.from_place ? byTag.get(block.from_place.trim()) : undefined;
-      const matched = cited ?? matchByName(block, byName);
-      // Consumed either way: it is the model's working, not the answer.
-      block.from_place = null;
-
-      if (!matched) continue;
-      block.from_place_id = matched.id;
-      block.from_source_title = matched.source_id
-        ? sourceTitles.get(matched.source_id) ?? null
-        : null;
-    }
-  }
-}
-
-/** A saved place named in the block's title or venue, if there is one. */
-function matchByName(
-  block: { activity: string; location: string },
-  byName: Map<string, Place>,
-): Place | undefined {
-  const haystack = normalise(`${block.activity} ${block.location}`);
-  if (!haystack) return undefined;
-
-  const exact = byName.get(normalise(block.location)) ?? byName.get(normalise(block.activity));
-  if (exact) return exact;
-
-  // Longest first, so "Pavilion Bukit Bintang" wins over a hypothetical
-  // "Pavilion" rather than whichever happened to be stored first.
-  const candidates = [...byName.entries()].sort((a, b) => b[0].length - a[0].length);
-  for (const [name, place] of candidates) {
-    // Short names produce false positives inside longer words — "VCR" would
-    // match "discover" — so they only count as whole words.
-    if (name.length < 6) {
-      if (new RegExp(`\\b${escapeRegExp(name)}\\b`).test(haystack)) return place;
-      continue;
-    }
-    if (haystack.includes(name)) return place;
-  }
-  return undefined;
-}
-
-/**
- * The forms a place's name might be written in: the whole thing, and the part
- * before any bracket or dash, which is what a shortened reference keeps.
- */
-function aliases(name: string): string[] {
-  const full = normalise(name);
-  const short = normalise(name.split(/[(（\-–—|]/)[0] ?? '');
-  // Two words minimum for the short form. A one-word head like "Wat" would
-  // collect every temple in the city.
-  const useShort = short && short !== full && short.split(' ').length >= 2;
-  return useShort ? [full, short] : [full];
-}
-
-function normalise(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -192,17 +110,23 @@ function escapeRegExp(value: string): string {
  * catches semantic problems the JSON schema can't express — chiefly member ids
  * that don't exist, which would break the client's per-member filtering.
  */
-async function callPlanner(context: string, validMemberIds: string[]): Promise<Plan> {
-  const attempt = async (extraInstruction?: string): Promise<Plan> => {
+async function callPlanner(
+  context: string,
+  validMemberIds: string[],
+): Promise<PlanDraft> {
+  const attempt = async (extraInstruction?: string): Promise<PlanDraft> => {
     const raw = await structuredCall({
       system: VOYAGER_SYSTEM_PROMPT,
       userContent: extraInstruction ? `${context}\n\n${extraInstruction}` : context,
-      schema: PLAN_JSON_SCHEMA,
-      maxOutputTokens: 32_000,
+      schema: PLAN_DRAFT_JSON_SCHEMA,
+      // A draft is a fraction of the size a full plan was: blocks are a
+      // citation and a slot, and the trip's own details are no longer echoed
+      // back. The old 32k ceiling was sized for prose we now never ask for.
+      maxOutputTokens: 8_000,
       effort: env.PLANNER_EFFORT,
     });
 
-    const parsed = PlanSchema.safeParse(raw);
+    const parsed = DraftSchema.safeParse(raw);
     if (!parsed.success) {
       throw unprocessable(
         'plan_validation_failed',
@@ -211,7 +135,7 @@ async function callPlanner(context: string, validMemberIds: string[]): Promise<P
       );
     }
 
-    const badIds = unknownMemberIds(parsed.data, validMemberIds);
+    const badIds = unknownConflictMemberIds(parsed.data, validMemberIds);
     if (badIds.length) {
       throw unprocessable(
         'plan_unknown_member_ids',
@@ -227,26 +151,27 @@ async function callPlanner(context: string, validMemberIds: string[]): Promise<P
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return attempt(
-      `## CORRECTION\nYour previous response was rejected: ${message}\nReturn a corrected plan. Every id in "members" and in each block's "suited_for_members" must be one of exactly these ids: ${validMemberIds.join(', ')}.`,
+      `## CORRECTION\nYour previous response was rejected: ${message}\nReturn a corrected plan. Every id in a conflict's "members_involved" must be one of exactly these ids: ${validMemberIds.join(', ')}.`,
     );
   }
 }
 
-function unknownMemberIds(plan: Plan, validIds: string[]): string[] {
+/**
+ * Member ids the draft invented.
+ *
+ * Only conflicts carry them now — the draft no longer echoes member profiles
+ * back, and blocks no longer say who they suit — so this checks the one place
+ * an id can still appear and be wrong.
+ */
+function unknownConflictMemberIds(draft: PlanDraft, validIds: string[]): string[] {
   // A trip with no members yet can't be checked against anything.
   if (validIds.length === 0) return [];
 
   const valid = new Set(validIds);
   const seen = new Set<string>();
-
-  for (const member of plan.members) {
-    if (!valid.has(member.id)) seen.add(member.id);
-  }
-  for (const day of plan.itinerary) {
-    for (const block of day.blocks) {
-      for (const id of block.suited_for_members) {
-        if (!valid.has(id)) seen.add(id);
-      }
+  for (const conflict of draft.conflicts) {
+    for (const id of conflict.members_involved) {
+      if (!valid.has(id)) seen.add(id);
     }
   }
   return [...seen];
