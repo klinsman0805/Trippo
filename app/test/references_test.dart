@@ -379,4 +379,76 @@ void main() {
       expect(categoryLabel('shopping'), 'shopping');
     });
   });
+
+  group('The generating screen', () {
+    testWidgets('shows time spent, and what the run is working from',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, inner) => WayfareTheme(
+            platform: WayfarePlatform.ios,
+            child: inner ?? const SizedBox.shrink(),
+          ),
+          home: const Scaffold(
+            body: Stack(
+              children: [GeneratingOverlay(placeCount: 8, dayCount: 4)],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.text('Working from 8 saved places across 4 days.'),
+        findsOneWidget,
+      );
+      expect(find.text('0s'), findsOneWidget);
+
+      // The bar is drawn from elapsed time against a typical run: it moves
+      // from the first frame, and eases rather than marching.
+      double fraction() =>
+          tester.widget<WayfareBar>(find.byType(WayfareBar)).fraction;
+      expect(fraction(), 0);
+
+      // The ticker sets state during the frame, so the value it produced is
+      // visible on the next one.
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pump();
+      final early = fraction();
+      expect(early, greaterThan(0.2));
+
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pump();
+      final later = fraction();
+      expect(later, greaterThan(early));
+      // Decelerating — the longer it runs, the less the bar knows.
+      expect(later - early, lessThan(early));
+      expect(find.text('20s'), findsOneWidget);
+    });
+
+    testWidgets('never claims to be finished', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, inner) => WayfareTheme(
+            platform: WayfarePlatform.ios,
+            child: inner ?? const SizedBox.shrink(),
+          ),
+          home: const Scaffold(
+            body: Stack(children: [GeneratingOverlay()]),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(minutes: 5));
+      await tester.pump();
+
+      // A bar that reaches 100% and then sits there is a lie told slowly.
+      expect(
+        tester.widget<WayfareBar>(find.byType(WayfareBar)).fraction,
+        lessThan(1.0),
+      );
+      expect(find.textContaining('Still going'), findsOneWidget);
+      expect(find.text('5m 00s'), findsOneWidget);
+    });
+  });
 }

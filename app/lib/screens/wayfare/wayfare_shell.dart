@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart' hide TimeOfDay;
+import 'package:flutter/scheduler.dart';
 
 import '../../api/trippo_api.dart';
 import '../../design/features.dart';
@@ -82,7 +85,11 @@ class _WayfareShellState extends State<WayfareShell> {
             children: [
               Positioned.fill(child: _frame(context)),
               if (_controller.sheetOpen) _sheet(context),
-              if (_controller.generating) const GeneratingOverlay(),
+              if (_controller.generating)
+                GeneratingOverlay(
+                  placeCount: _controller.importedPlaces.length,
+                  dayCount: _plannedDayCount(),
+                ),
             ],
           ),
         ),
@@ -886,10 +893,65 @@ class _WayfareShellState extends State<WayfareShell> {
 
 /// Full-frame overlay while the planner runs. Real calls take minutes, so the
 /// note names what's actually happening rather than showing a bare spinner.
-class GeneratingOverlay extends StatelessWidget {
-  const GeneratingOverlay({super.key, this.note});
+class GeneratingOverlay extends StatefulWidget {
+  const GeneratingOverlay({
+    super.key,
+    this.note,
+    this.placeCount = 0,
+    this.dayCount = 0,
+  });
 
   final String? note;
+
+  /// What the run is working from. Both are known before the call starts, and
+  /// naming them is the one honest thing this screen can say about progress.
+  final int placeCount;
+  final int dayCount;
+
+  @override
+  State<GeneratingOverlay> createState() => _GeneratingOverlayState();
+}
+
+class _GeneratingOverlayState extends State<GeneratingOverlay>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker = createTicker((elapsed) {
+    setState(() => _elapsed = elapsed);
+  });
+
+  Duration _elapsed = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    // Started here, not in the field's initialiser: a `late final` is lazy, so
+    // a ticker nobody reads is a ticker that never runs.
+    _ticker.start();
+  }
+
+  /// The run is one request: there is no progress to report, only time spent.
+  ///
+  /// So the bar is drawn from elapsed time against a typical run, easing as it
+  /// goes and stopping short of the end — it never claims to be nearly done,
+  /// because it does not know. A bar that marched to 100% and then sat there
+  /// would be a lie told slowly.
+  static const _typical = Duration(seconds: 45);
+  static const _ceiling = 0.92;
+
+  /// Past this the estimate has plainly been beaten, so the copy says so
+  /// rather than letting the bar keep creeping in silence.
+  static const _slow = Duration(seconds: 100);
+
+  double get _fraction {
+    final t = _elapsed.inMilliseconds / _typical.inMilliseconds;
+    // 1 − e^−t: quick at first, slower the longer it runs, never arriving.
+    return _ceiling * (1 - math.exp(-1.6 * t));
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -920,21 +982,34 @@ class GeneratingOverlay extends StatelessWidget {
                       color: WayfareColors.generatingInk,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 18),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 250),
+                    child: WayfareBar(
+                      fraction: _fraction,
+                      fill: WayfareColors.accent,
+                      track: WayfareColors.generatingTrack,
+                      height: 5,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 260),
                     child: Text(
-                      note ??
-                          (WayfareFeatures.groups
-                              ? 'Balancing everyone\'s preferences. This takes '
-                                  'a minute.'
-                              : 'Working through your days. This takes a '
-                                  'minute.'),
+                      widget.note ?? _line(),
                       textAlign: TextAlign.center,
                       style: WayfareType.body(
                         14,
                         color: WayfareColors.generatingNote,
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _clock(),
+                    style: WayfareType.body(
+                      12.5,
+                      color: WayfareColors.generatingTrack,
                     ),
                   ),
                 ],
@@ -944,6 +1019,34 @@ class GeneratingOverlay extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// What it is working from, which is knowable, rather than what step it is
+  /// on, which is not.
+  String _line() {
+    if (_elapsed > _slow) {
+      return 'Still going. More days and more saved places take longer.';
+    }
+
+    final parts = [
+      if (widget.placeCount > 0)
+        '${widget.placeCount} saved '
+            '${widget.placeCount == 1 ? 'place' : 'places'}',
+      if (widget.dayCount > 0)
+        '${widget.dayCount} ${widget.dayCount == 1 ? 'day' : 'days'}',
+    ];
+    if (parts.isEmpty) {
+      return WayfareFeatures.groups
+          ? 'Balancing everyone\'s preferences. This takes a minute.'
+          : 'Working through your days. This takes a minute.';
+    }
+    return 'Working from ${parts.join(' across ')}.';
+  }
+
+  String _clock() {
+    final seconds = _elapsed.inSeconds;
+    if (seconds < 60) return '${seconds}s';
+    return '${seconds ~/ 60}m ${(seconds % 60).toString().padLeft(2, '0')}s';
   }
 }
 

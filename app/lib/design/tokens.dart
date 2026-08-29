@@ -116,6 +116,10 @@ abstract final class WayfareColors {
   static const optionalDash = Color(0xFFDCC9A4);
   static const generatingInk = Color(0xFFFDF8EF);
   static const generatingNote = Color(0xFFC3B8A8);
+
+  /// The unfilled part of the progress bar on the generating screen, and the
+  /// elapsed clock under it — present, but never competing with the note.
+  static const generatingTrack = Color(0xFF544A3D);
   static const scrim = Color(0x6B1E1812); // rgba(30,24,18,.42)
 
   /// Assigned to members by index, wrapping.
