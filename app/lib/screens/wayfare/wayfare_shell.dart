@@ -19,6 +19,8 @@ import 'itinerary/regenerate_sheet.dart';
 import 'needs_info.dart';
 import 'plan_failed.dart';
 import 'refine_tab.dart';
+import 'sources/import_sheet.dart';
+import 'sources/sources_screen.dart';
 import 'shell_chrome.dart';
 import 'traveller_sheet.dart';
 import 'trip_tab.dart';
@@ -173,6 +175,7 @@ class _WayfareShellState extends State<WayfareShell> {
         onEnterBookedFlight: _openBookedFlight,
         onOpenFlights: _openFlights,
         onSetDatesByHand: _pickDatesByHand,
+        onImportLink: _openImport,
         onGoToGroup: () => _controller.goTo(WayfareTab.group),
         memberCount: _controller.members.length,
       );
@@ -190,6 +193,8 @@ class _WayfareShellState extends State<WayfareShell> {
           canGenerate: _controller.canGenerate,
           onGenerate: _controller.generate,
           onWriteFirst: _startFromScratch,
+          onImportLink: _openImport,
+          sourceCount: _controller.sourceCount,
         ),
       );
     }
@@ -213,6 +218,7 @@ class _WayfareShellState extends State<WayfareShell> {
         onGenerate: _controller.generate,
         memberCount: _controller.members.length,
         onGoToGroup: () => _controller.goTo(WayfareTab.group),
+        onSetDestination: _setDestination,
       );
     }
 
@@ -415,6 +421,17 @@ class _WayfareShellState extends State<WayfareShell> {
               ),
             ),
             const SizedBox(height: 14),
+            // First, because it is the one that does the work for you: the
+            // places are already written down somewhere.
+            ListTile(
+              leading: const Icon(Icons.link, color: WayfareColors.accent),
+              title: const Text('Add from a link'),
+              subtitle: const Text('A 小红书 post, a list, a blog'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _openImport();
+              },
+            ),
             ListTile(
               leading:
                   const Icon(Icons.add_task_outlined, color: WayfareColors.ink),
@@ -440,6 +457,72 @@ class _WayfareShellState extends State<WayfareShell> {
         ),
       ),
     );
+  }
+
+  /// Paste a link, get places. Reloads the trip after, because an import
+  /// changes what a regeneration would produce.
+  Future<void> _openImport() async {
+    await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => WayfareTheme(
+        platform: widget.platformOverride ?? WayfareTheme.hostPlatform(),
+        child: ImportLinkSheet(controller: _controller),
+      ),
+    );
+    if (mounted) await _controller.load();
+  }
+
+  Future<void> _openSources() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => WayfareTheme(
+          platform: widget.platformOverride ?? WayfareTheme.hostPlatform(),
+          child: SourcesScreen(controller: _controller),
+        ),
+      ),
+    );
+    if (mounted) await _controller.load();
+  }
+
+  /// Where the trip is going, for a trip created before the app asked.
+  Future<void> _setDestination() async {
+    final current = _controller.trip?.destinations.firstOrNull ?? '';
+    final input = TextEditingController(text: current);
+
+    final value = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WayfareColors.surface,
+        title: Text('Where are you going?', style: WayfareType.display(24)),
+        content: WayfareTextField(
+          controller: input,
+          hint: 'e.g. Bangkok',
+          autofocus: true,
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: WayfareColors.mutedLight),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, input.text.trim()),
+            child: const Text(
+              'Save',
+              style: TextStyle(color: WayfareColors.accent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (value == null || value.isEmpty) return;
+    await _controller.setDestination(value);
   }
 
   /// Removing the day currently on screen.
@@ -531,6 +614,28 @@ class _WayfareShellState extends State<WayfareShell> {
               ),
             ),
             const SizedBox(height: 14),
+            ListTile(
+              leading: const Icon(Icons.place_outlined, color: WayfareColors.ink),
+              title: const Text('Set the destination'),
+              subtitle: Text(
+                _controller.trip?.destinations.isNotEmpty == true
+                    ? _controller.trip!.destinations.join(', ')
+                    : 'Not set — the planner cannot run without one',
+              ),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _setDestination();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.link, color: WayfareColors.ink),
+              title: const Text('Your references'),
+              subtitle: const Text('Links you have imported, and what came out'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _openSources();
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.confirmation_number_outlined,
                   color: WayfareColors.ink),
@@ -832,11 +937,13 @@ class _NoDatesYet extends StatelessWidget {
     required this.onSetDatesByHand,
     required this.onGoToGroup,
     required this.memberCount,
+    required this.onImportLink,
   });
 
   final VoidCallback onEnterBookedFlight;
   final VoidCallback onOpenFlights;
   final VoidCallback onSetDatesByHand;
+  final VoidCallback onImportLink;
   final VoidCallback onGoToGroup;
   final int memberCount;
 
@@ -872,6 +979,7 @@ class _NoDatesYet extends StatelessWidget {
             onTap: onOpenFlights,
           ),
           const SizedBox(height: WayfareSpace.cardGap),
+          const SizedBox(height: WayfareSpace.cardGap),
           _StartOption(
             icon: Icons.directions_railway_outlined,
             title: 'Not flying?',
@@ -879,6 +987,18 @@ class _NoDatesYet extends StatelessWidget {
                 'planning. Flights are one way to set them, not the only one.',
             cta: 'Set dates myself',
             onTap: onSetDatesByHand,
+          ),
+          const SizedBox(height: WayfareSpace.sectionGap),
+          // Dates and references are independent: the planner can hold a pile
+          // of places long before it knows which days to spread them across,
+          // and collecting them is what people are doing anyway.
+          _StartOption(
+            icon: Icons.link,
+            title: 'Already saving places?',
+            body: 'Paste a 小红书 post, a list or a blog now. We read it and '
+                'keep the places, ready for whenever the dates land.',
+            cta: 'Import a link',
+            onTap: onImportLink,
           ),
           if (WayfareFeatures.groups && memberCount == 0) ...[
             const SizedBox(height: WayfareSpace.sectionGap),
@@ -987,6 +1107,7 @@ class _BlankState extends StatelessWidget {
     required this.onGenerate,
     required this.memberCount,
     required this.onGoToGroup,
+    required this.onSetDestination,
   });
 
   final String title;
@@ -995,6 +1116,7 @@ class _BlankState extends StatelessWidget {
   final VoidCallback onGenerate;
   final int memberCount;
   final VoidCallback onGoToGroup;
+  final VoidCallback onSetDestination;
 
   @override
   Widget build(BuildContext context) {
@@ -1029,12 +1151,21 @@ class _BlankState extends StatelessWidget {
               fontSize: 14.5,
               weight: FontWeight.w500,
             )
-          else
+          else ...[
             Text(
-              'Add a destination first — the planner needs somewhere to go.',
+              'The planner needs somewhere to go before it can plan anything.',
               textAlign: TextAlign.center,
               style: WayfareType.body(12.5, color: WayfareColors.mutedLight),
             ),
+            const SizedBox(height: 10),
+            // This said what was missing and left you to find where to fix it.
+            WayfarePrimaryButton(
+              label: 'Set the destination',
+              onPressed: onSetDestination,
+              fontSize: 14.5,
+              weight: FontWeight.w500,
+            ),
+          ],
           if (WayfareFeatures.groups && memberCount < 2) ...[
             const SizedBox(height: 10),
             WayfareSecondaryButton(
@@ -1064,18 +1195,40 @@ class ItineraryStartOptions extends StatelessWidget {
     required this.canGenerate,
     required this.onGenerate,
     required this.onWriteFirst,
+    required this.onImportLink,
+    required this.sourceCount,
   });
 
   final int dayCount;
   final bool canGenerate;
   final VoidCallback onGenerate;
   final VoidCallback onWriteFirst;
+  final VoidCallback onImportLink;
+
+  /// How many links have already been read. Changes the first card from an
+  /// invitation into a statement of what the planner is working from.
+  final int sourceCount;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // First, and framed as the thing that saves you the typing. Generating
+        // from nothing gives you a competent stranger's itinerary; generating
+        // from your own saved posts is the reason to use this at all.
+        _card(
+          context,
+          eyebrow: sourceCount > 0 ? 'Read so far' : 'Start from what you saved',
+          eyebrowColor: WayfareColors.accent,
+          title: sourceCount > 0
+              ? '$sourceCount ${sourceCount == 1 ? 'link' : 'links'} in — add another'
+              : 'Paste a link you already saved',
+          cta: sourceCount > 0 ? 'Add another link' : 'Import a link',
+          filled: sourceCount == 0,
+          onTap: onImportLink,
+        ),
+        const SizedBox(height: WayfareSpace.cardGap),
         _card(
           context,
           eyebrow: 'Have it planned',
@@ -1084,7 +1237,7 @@ class ItineraryStartOptions extends StatelessWidget {
               ? 'Let the planner fill the $dayCount days'
               : 'Let the planner fill your days',
           cta: 'Generate the itinerary',
-          filled: true,
+          filled: sourceCount > 0,
           onTap: canGenerate ? onGenerate : null,
         ),
         const SizedBox(height: WayfareSpace.cardGap),

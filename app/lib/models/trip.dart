@@ -209,6 +209,7 @@ class TripSource {
     this.title,
     this.author,
     this.error,
+    this.placeCount = 0,
   });
 
   final String id;
@@ -218,6 +219,10 @@ class TripSource {
   final String? title;
   final String? author;
   final String? error;
+
+  /// How many places came out of it — the one number that says whether the
+  /// import was worth anything.
+  final int placeCount;
 
   bool get needsManualInput => status == SourceStatus.needsManual;
 
@@ -229,6 +234,7 @@ class TripSource {
         title: json['title'] as String?,
         author: json['author'] as String?,
         error: json['error'] as String?,
+        placeCount: (json['place_count'] as num?)?.toInt() ?? 0,
       );
 }
 

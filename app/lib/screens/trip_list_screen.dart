@@ -47,39 +47,23 @@ class _TripListScreenState extends State<TripListScreen> {
 
   void _onChanged() => setState(() {});
 
+  /// The new-trip dialog asks where, not what to call it.
+  ///
+  /// It used to take a title only, and a title is not a destination — so every
+  /// trip was created with none, `canGenerate` was false, and the planner
+  /// could not be reached at all. The place you are going is the one thing the
+  /// planner cannot work without, so it is the one thing this asks for.
   Future<void> _createTrip() async {
-    final controller = TextEditingController();
-    final title = await showDialog<String>(
+    final destination = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: WayfareColors.surface,
-        title: Text('New trip', style: WayfareType.display(24)),
-        content: WayfareTextField(
-          controller: controller,
-          hint: 'e.g. Portugal, Slowly',
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: WayfareColors.mutedLight),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text(
-              'Create',
-              style: TextStyle(color: WayfareColors.accent),
-            ),
-          ),
-        ],
-      ),
+      builder: (ctx) => const _NewTripDialog(),
     );
 
-    if (title == null || title.isEmpty) return;
-    final trip = await _repo.create(title);
+    if (destination == null || destination.isEmpty) return;
+    final trip = await _repo.create(
+      destination,
+      destinations: [destination],
+    );
     if (mounted) widget.onOpenTrip(context, trip.id);
   }
 
@@ -203,6 +187,81 @@ class _TripListScreenState extends State<TripListScreen> {
         ),
       ),
     };
+  }
+}
+
+/// Where are you going — the only question standing between a new trip and a
+/// generated itinerary.
+class _NewTripDialog extends StatefulWidget {
+  const _NewTripDialog();
+
+  @override
+  State<_NewTripDialog> createState() => _NewTripDialogState();
+}
+
+class _NewTripDialogState extends State<_NewTripDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String get _value => _controller.text.trim();
+
+  void _submit() {
+    if (_value.isEmpty) return;
+    Navigator.pop(context, _value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: WayfareColors.surface,
+      title: Text('Where are you going?', style: WayfareType.display(24)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          WayfareTextField(
+            controller: _controller,
+            hint: 'e.g. Bangkok',
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'The trip takes this as its name. You can rename it later — the '
+            'planner needs somewhere to go before it can plan anything.',
+            style: WayfareType.body(12.5, color: WayfareColors.mutedLight),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(color: WayfareColors.mutedLight),
+          ),
+        ),
+        TextButton(
+          // Dead until there is a destination, rather than creating a trip
+          // that cannot be planned.
+          onPressed: _value.isEmpty ? null : _submit,
+          child: Text(
+            'Create',
+            style: TextStyle(
+              color: _value.isEmpty
+                  ? WayfareColors.mutedLight
+                  : WayfareColors.accent,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

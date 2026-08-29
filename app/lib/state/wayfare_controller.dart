@@ -66,6 +66,13 @@ class WayfareController extends ChangeNotifier {
   /// the CTA counts these, so a half-filled form is a legitimate state.
   Map<String, String> answers = {};
 
+  /// How many links have been imported into this trip.
+  ///
+  /// Kept on the controller rather than fetched per screen: the empty state
+  /// leads with it, and a card that says "2 links in" cannot wait on a request
+  /// to find out.
+  int sourceCount = 0;
+
   /// The traveller whose edit sheet is open, if any.
   String? editingMemberId;
 
@@ -160,6 +167,8 @@ class WayfareController extends ChangeNotifier {
       messages = await _api.chatThread(tripId);
       failure = await _api.planFailure(tripId);
       answers = {};
+
+      sourceCount = (await _api.listSources(tripId)).length;
 
       final flights = await _api.tripFlights(tripId);
       dateEnvelope = flights.envelope;
@@ -288,6 +297,55 @@ class WayfareController extends ChangeNotifier {
     } on ApiException catch (e) {
       error = e.message;
     }
+    notifyListeners();
+  }
+
+  /// Where the trip is going.
+  ///
+  /// [canGenerate] turns on this and nothing else, so a trip without it can
+  /// only ever be written by hand — which is why it is settable from the trip
+  /// itself and not only at the moment one is created.
+  Future<void> setDestination(String destination) async {
+    try {
+      trip = await _api.updateTrip(tripId, {
+        'destinations': [destination],
+      });
+      error = null;
+    } on ApiException catch (e) {
+      error = e.message;
+    }
+    notifyListeners();
+  }
+
+  /// Links, posts and articles imported into this trip.
+  Future<List<TripSource>> sources() => _api.listSources(tripId);
+
+  /// Everything those imports produced, newest source first.
+  Future<List<Place>> places() => _api.listPlaces(tripId);
+
+  /// Pulls the places out of a pasted link. Returns what came back so the
+  /// sheet can say how much it found.
+  Future<ImportResult> importLink(String urlOrShareText) async {
+    final result = await _api.importUrl(tripId, urlOrShareText);
+    pendingSourceId = result.manualInputRequired ? result.source.id : null;
+    notifyListeners();
+    return result;
+  }
+
+  /// Completes an import the fetch could not: the user pastes the post text.
+  Future<ImportResult> importPastedText(String text, {String? sourceId}) async {
+    final result = await _api.importText(
+      tripId,
+      text,
+      sourceId: sourceId ?? pendingSourceId,
+    );
+    pendingSourceId = null;
+    notifyListeners();
+    return result;
+  }
+
+  Future<void> removeSource(String sourceId) async {
+    await _api.deleteSource(tripId, sourceId);
     notifyListeners();
   }
 

@@ -225,10 +225,20 @@ export function getSource(id: string): SourceRecord {
   return row as SourceRecord;
 }
 
-export function listSources(tripId: string): SourceRecord[] {
+/**
+ * Every source on the trip, newest first, each with how many places came out
+ * of it — the one number that says whether an import was worth anything, and
+ * the reason the list is worth showing at all.
+ */
+export function listSources(tripId: string): (SourceRecord & { place_count: number })[] {
   return db
-    .prepare('SELECT * FROM sources WHERE trip_id = ? ORDER BY created_at DESC')
-    .all(tripId) as SourceRecord[];
+    .prepare(
+      `SELECT s.*, (SELECT COUNT(*) FROM places p WHERE p.source_id = s.id) AS place_count
+         FROM sources s
+        WHERE s.trip_id = ?
+        ORDER BY s.created_at DESC`,
+    )
+    .all(tripId) as (SourceRecord & { place_count: number })[];
 }
 
 export function deleteSource(id: string): void {
