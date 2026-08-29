@@ -9,7 +9,10 @@ import 'package:trippo/api/trippo_api.dart';
 import 'package:trippo/design/theme.dart';
 import 'package:trippo/design/widgets.dart';
 import 'package:trippo/screens/trip_list_screen.dart';
+import 'package:trippo/models/trip.dart';
+import 'package:trippo/screens/wayfare/formatting.dart';
 import 'package:trippo/screens/wayfare/sources/import_sheet.dart';
+import 'package:trippo/screens/wayfare/wayfare_shell.dart';
 import 'package:trippo/screens/wayfare/sources/sources_screen.dart';
 import 'package:trippo/state/wayfare_controller.dart';
 
@@ -312,6 +315,68 @@ void main() {
       );
       expect(find.widgetWithText(WayfarePrimaryButton, 'Import a link'),
           findsOneWidget);
+    });
+  });
+
+  group('What the imports produced', () {
+    Place place(String name) => Place(id: name, name: name);
+
+    testWidgets('is named back, so an import is visible from the trip',
+        (tester) async {
+      await wrap(
+        tester,
+        Scaffold(
+          body: ImportedPlacesCard(
+            places: [
+              place('Petronas Twin Towers'),
+              place('Pavilion Bukit Bintang'),
+              place('VCR'),
+              place('Jay Fai'),
+            ],
+            sourceCount: 1,
+            onSeeAll: () {},
+            onImportMore: () {},
+            awaitingDates: true,
+          ),
+        ),
+      );
+
+      // The bug: eight places came back and the screen behind the sheet
+      // looked exactly as it had before, so the import read as a no-op.
+      expect(find.text('4 places from 1 link'), findsOneWidget);
+      expect(
+        find.text('Petronas Twin Towers, Pavilion Bukit Bintang, VCR and 1 more.'),
+        findsOneWidget,
+      );
+      // Without dates they cannot be planned yet, so it says what they wait on.
+      expect(find.textContaining('Set your dates'), findsOneWidget);
+      expect(find.text('See all 4'), findsOneWidget);
+    });
+
+    testWidgets('says nothing at all when nothing has been imported',
+        (tester) async {
+      await wrap(
+        tester,
+        Scaffold(
+          body: ImportedPlacesCard(
+            places: const [],
+            sourceCount: 0,
+            onSeeAll: () {},
+            onImportMore: () {},
+          ),
+        ),
+      );
+
+      expect(find.textContaining('from your links'), findsNothing);
+    });
+
+    test('categories read as a traveller would say them', () {
+      // The stored vocabulary is the extractor's and stays as it is; these
+      // are the words on screen.
+      expect(categoryLabel('lodging'), 'accommodation');
+      expect(categoryLabel('sight'), 'destination');
+      expect(categoryLabel('food'), 'food');
+      expect(categoryLabel('shopping'), 'shopping');
     });
   });
 }

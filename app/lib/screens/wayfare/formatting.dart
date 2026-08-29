@@ -138,6 +138,20 @@ plan_models.TimeOfDay slotForTime(String hhmm) {
   return plan_models.TimeOfDay.evening;
 }
 
+/// What to call a place's category on screen.
+///
+/// The stored values are the extractor's vocabulary and stay as they are —
+/// changing them would invalidate every place already saved. These are the
+/// words a traveller uses: you book accommodation, not lodging, and a temple
+/// is a destination rather than a "sight".
+String categoryLabel(String category) => switch (category.toLowerCase()) {
+      'lodging' => 'accommodation',
+      'sight' => 'destination',
+      'nightlife' => 'night out',
+      'transport' => 'getting around',
+      _ => category.toLowerCase(),
+    };
+
 /// `Sat 12 Sep`
 String weekdayAndDate(String iso) {
   final date = DateTime.tryParse(iso);

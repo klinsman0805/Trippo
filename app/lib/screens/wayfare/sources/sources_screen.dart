@@ -5,6 +5,7 @@ import '../../../design/tokens.dart';
 import '../../../design/widgets.dart';
 import '../../../models/trip.dart';
 import '../../../state/wayfare_controller.dart';
+import '../formatting.dart';
 import '../shell_chrome.dart';
 import 'import_sheet.dart';
 
@@ -313,7 +314,7 @@ class _SourceCard extends StatelessWidget {
                         ),
                         if (place.category != null)
                           Text(
-                            place.category!,
+                            categoryLabel(place.category!),
                             style: const TextStyle(
                               fontSize: 11.5,
                               color: WayfareColors.mutedLight,

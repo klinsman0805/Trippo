@@ -122,7 +122,7 @@ class _WayfareShellState extends State<WayfareShell> {
         ),
         Expanded(
           child: SingleChildScrollView(
-            child: _body(),
+              child: _body(),
           ),
         ),
         if (_controller.tab == WayfareTab.chat)
@@ -176,6 +176,9 @@ class _WayfareShellState extends State<WayfareShell> {
         onOpenFlights: _openFlights,
         onSetDatesByHand: _pickDatesByHand,
         onImportLink: _openImport,
+        onSeeReferences: _openSources,
+        importedPlaces: _controller.importedPlaces,
+        sourceCount: _controller.sourceCount,
         onGoToGroup: () => _controller.goTo(WayfareTab.group),
         memberCount: _controller.members.length,
       );
@@ -189,6 +192,8 @@ class _WayfareShellState extends State<WayfareShell> {
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
         child: ItineraryStartOptions(
+          importedPlaces: _controller.importedPlaces,
+          onSeeReferences: _openSources,
           dayCount: _plannedDayCount(),
           canGenerate: _controller.canGenerate,
           onGenerate: _controller.generate,
@@ -203,17 +208,17 @@ class _WayfareShellState extends State<WayfareShell> {
     if (_controller.isBlank) {
       return _BlankState(
         title: _controller.tab == WayfareTab.budget
-            ? 'No numbers yet'
-            : 'No itinerary yet',
+              ? 'No numbers yet'
+              : 'No itinerary yet',
         note: !WayfareFeatures.groups
-            ? 'Generate one whenever you like, or write the first activity '
-                'yourself.'
-            : _controller.members.isEmpty
-                ? 'Generate one whenever you like. Adding travellers first '
-                    'makes the plan fit the group, but it is not required.'
-                : 'You have ${_controller.members.length} '
-                    '${_controller.members.length == 1 ? 'traveller' : 'travellers'} '
-                    'ready. Generate and this fills in.',
+              ? 'Generate one whenever you like, or write the first activity '
+                  'yourself.'
+              : _controller.members.isEmpty
+                  ? 'Generate one whenever you like. Adding travellers first '
+                      'makes the plan fit the group, but it is not required.'
+                  : 'You have ${_controller.members.length} '
+                      '${_controller.members.length == 1 ? 'traveller' : 'travellers'} '
+                      'ready. Generate and this fills in.',
         canGenerate: _controller.canGenerate,
         onGenerate: _controller.generate,
         memberCount: _controller.members.length,
@@ -246,14 +251,14 @@ class _WayfareShellState extends State<WayfareShell> {
         builder: (_) => WayfareTheme(
           platform: widget.platformOverride ?? WayfareTheme.hostPlatform(),
           child: FlightsScreen(
-            api: widget.api,
-            trip: trip,
-            onSelected: (offer, envelope) {
-              // Hand back to the Trip tab, where the consequence lands.
-              Navigator.of(context).pop();
-              _controller.goTo(WayfareTab.itinerary);
-              _controller.load();
-            },
+              api: widget.api,
+              trip: trip,
+              onSelected: (offer, envelope) {
+                // Hand back to the Trip tab, where the consequence lands.
+                Navigator.of(context).pop();
+                _controller.goTo(WayfareTab.itinerary);
+                _controller.load();
+              },
           ),
         ),
       ),
@@ -271,9 +276,9 @@ class _WayfareShellState extends State<WayfareShell> {
           api: widget.api,
           trip: trip,
           onConfirmed: (_) {
-            Navigator.of(context).pop();
-            _controller.goTo(WayfareTab.itinerary);
-            _controller.load();
+              Navigator.of(context).pop();
+              _controller.goTo(WayfareTab.itinerary);
+              _controller.load();
           },
         ),
       ),
@@ -383,11 +388,11 @@ class _WayfareShellState extends State<WayfareShell> {
         // Whether the slot goes dark matters more than the count, so it is
         // computed rather than described vaguely.
         slotBecomesEmpty:
-            day.blocks.where((b) => b.timeOfDay == block.timeOfDay).length == 1,
+              day.blocks.where((b) => b.timeOfDay == block.timeOfDay).length == 1,
         dayCostBefore: day.costPerPerson(),
         currency: _controller.plan?.trip.currency ??
-            _controller.trip?.currency ??
-            'USD',
+              _controller.trip?.currency ??
+              'USD',
         onKeep: () => Navigator.of(context).pop(),
         onRemove: () {
           Navigator.of(context).pop();
@@ -407,53 +412,62 @@ class _WayfareShellState extends State<WayfareShell> {
           top: Radius.circular(WayfareTheme.of(context).sheetRadius),
         ),
       ),
+      // Scrollable and capped: a menu grows an item at a time, and a fixed
+      // Column in a sheet has no way to say it ran out of room — it just
+      // overflows off the bottom edge.
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+      ),
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 10),
-            Container(
-              width: 44,
-              height: 4,
-              decoration: BoxDecoration(
-                color: WayfareColors.border,
-                borderRadius: BorderRadius.circular(999),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: WayfareColors.border,
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            // First, because it is the one that does the work for you: the
-            // places are already written down somewhere.
-            ListTile(
-              leading: const Icon(Icons.link, color: WayfareColors.accent),
-              title: const Text('Add from a link'),
-              subtitle: const Text('A 小红书 post, a list, a blog'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _openImport();
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.add_task_outlined, color: WayfareColors.ink),
-              title: const Text('Add an activity'),
-              subtitle: Text('Onto day ${_controller.selectedDay}'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _openAddActivity(TimeOfDay.anytime);
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.today_outlined, color: WayfareColors.ink),
-              title: const Text('Add a day'),
-              subtitle: const Text('Extends the trip by one day'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _controller.addDay();
-              },
-            ),
-            const SizedBox(height: 12),
-          ],
+              const SizedBox(height: 14),
+              // First, because it is the one that does the work for you: the
+              // places are already written down somewhere.
+              ListTile(
+                leading: const Icon(Icons.link, color: WayfareColors.accent),
+                title: const Text('Add from a link'),
+                subtitle: const Text('A 小红书 post, a list, a blog'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _openImport();
+                },
+              ),
+              ListTile(
+                leading:
+                    const Icon(Icons.add_task_outlined, color: WayfareColors.ink),
+                title: const Text('Add an activity'),
+                subtitle: Text('Onto day ${_controller.selectedDay}'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _openAddActivity(TimeOfDay.anytime);
+                },
+              ),
+              ListTile(
+                leading:
+                    const Icon(Icons.today_outlined, color: WayfareColors.ink),
+                title: const Text('Add a day'),
+                subtitle: const Text('Extends the trip by one day'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _controller.addDay();
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
@@ -600,10 +614,18 @@ class _WayfareShellState extends State<WayfareShell> {
           top: Radius.circular(WayfareTheme.of(context).sheetRadius),
         ),
       ),
+      // Scrollable and capped: a menu grows an item at a time, and a fixed
+      // Column in a sheet has no way to say it ran out of room — it just
+      // overflows off the bottom edge.
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+      ),
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             const SizedBox(height: 10),
             Container(
               width: 44,
@@ -720,8 +742,9 @@ class _WayfareShellState extends State<WayfareShell> {
                 _controller.goTo(WayfareTab.chat);
               },
             ),
-            const SizedBox(height: 12),
-          ],
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
@@ -938,12 +961,18 @@ class _NoDatesYet extends StatelessWidget {
     required this.onGoToGroup,
     required this.memberCount,
     required this.onImportLink,
+    required this.onSeeReferences,
+    required this.importedPlaces,
+    required this.sourceCount,
   });
 
   final VoidCallback onEnterBookedFlight;
   final VoidCallback onOpenFlights;
   final VoidCallback onSetDatesByHand;
   final VoidCallback onImportLink;
+  final VoidCallback onSeeReferences;
+  final List<Place> importedPlaces;
+  final int sourceCount;
   final VoidCallback onGoToGroup;
   final int memberCount;
 
@@ -954,6 +983,13 @@ class _NoDatesYet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          ImportedPlacesCard(
+            places: importedPlaces,
+            sourceCount: sourceCount,
+            onSeeAll: onSeeReferences,
+            onImportMore: onImportLink,
+            awaitingDates: true,
+          ),
           Text(
             'The planner builds around your dates. Where do yours come from?',
             style: WayfareType.body(14, color: WayfareColors.subhead),
@@ -988,18 +1024,22 @@ class _NoDatesYet extends StatelessWidget {
             cta: 'Set dates myself',
             onTap: onSetDatesByHand,
           ),
-          const SizedBox(height: WayfareSpace.sectionGap),
           // Dates and references are independent: the planner can hold a pile
           // of places long before it knows which days to spread them across,
-          // and collecting them is what people are doing anyway.
-          _StartOption(
-            icon: Icons.link,
-            title: 'Already saving places?',
-            body: 'Paste a 小红书 post, a list or a blog now. We read it and '
-                'keep the places, ready for whenever the dates land.',
-            cta: 'Import a link',
-            onTap: onImportLink,
-          ),
+          // and collecting them is what people are doing anyway. Once
+          // something is saved, the card above says so and this would be
+          // asking twice.
+          if (importedPlaces.isEmpty) ...[
+            const SizedBox(height: WayfareSpace.sectionGap),
+            _StartOption(
+              icon: Icons.link,
+              title: 'Already saving places?',
+              body: 'Paste a 小红书 post, a list or a blog now. We read it and '
+                  'keep the places, ready for whenever the dates land.',
+              cta: 'Import a link',
+              onTap: onImportLink,
+            ),
+          ],
           if (WayfareFeatures.groups && memberCount == 0) ...[
             const SizedBox(height: WayfareSpace.sectionGap),
             Text(
@@ -1014,6 +1054,101 @@ class _NoDatesYet extends StatelessWidget {
               onPressed: onGoToGroup,
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// What the imports actually produced, named back.
+///
+/// Importing eight places and landing on a screen that looks exactly as it did
+/// before reads as an import that did nothing — which is what happened, and
+/// the reason this exists. It names them, and it says what they are waiting
+/// for, because places alone cannot become an itinerary without dates.
+class ImportedPlacesCard extends StatelessWidget {
+  const ImportedPlacesCard({
+    super.key,
+    required this.places,
+    required this.sourceCount,
+    required this.onSeeAll,
+    required this.onImportMore,
+    this.awaitingDates = false,
+  });
+
+  final List<Place> places;
+  final int sourceCount;
+  final VoidCallback onSeeAll;
+  final VoidCallback onImportMore;
+
+  /// True on the no-dates screen, where the places cannot be planned yet.
+  final bool awaitingDates;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = WayfareTheme.of(context);
+    if (places.isEmpty) return const SizedBox.shrink();
+
+    final names = places.take(3).map((p) => p.name).join(', ');
+    final rest = places.length - 3;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: WayfareSpace.sectionGap),
+      padding: const EdgeInsets.fromLTRB(15, 14, 15, 13),
+      decoration: BoxDecoration(
+        color: WayfareColors.infoBgAlt,
+        borderRadius: theme.cardLg,
+        border: Border.all(color: WayfareColors.infoBorderAlt),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const WayfareEyebrow(
+            'Saved from your links',
+            color: WayfareColors.accent,
+            size: 11.5,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${places.length} ${places.length == 1 ? 'place' : 'places'} from '
+            '$sourceCount ${sourceCount == 1 ? 'link' : 'links'}',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            rest > 0 ? '$names and $rest more.' : '$names.',
+            style: WayfareType.body(13, color: WayfareColors.infoText),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            awaitingDates
+                ? 'They are saved. Set your dates and the planner builds the '
+                    'itinerary around them.'
+                : 'The planner works from these when it builds the itinerary.',
+            style: WayfareType.body(12.5, color: WayfareColors.subhead),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: WayfareSecondaryButton(
+                  label: 'See all ${places.length}',
+                  onPressed: onSeeAll,
+                  fontSize: 13.5,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: WayfareSecondaryButton(
+                  label: 'Add another link',
+                  onPressed: onImportMore,
+                  fontSize: 13.5,
+                  background: Colors.transparent,
+                  foreground: WayfareColors.muted,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -1197,6 +1332,8 @@ class ItineraryStartOptions extends StatelessWidget {
     required this.onWriteFirst,
     required this.onImportLink,
     required this.sourceCount,
+    required this.importedPlaces,
+    required this.onSeeReferences,
   });
 
   final int dayCount;
@@ -1209,26 +1346,37 @@ class ItineraryStartOptions extends StatelessWidget {
   /// invitation into a statement of what the planner is working from.
   final int sourceCount;
 
+  final List<Place> importedPlaces;
+  final VoidCallback onSeeReferences;
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        ImportedPlacesCard(
+          places: importedPlaces,
+          sourceCount: sourceCount,
+          onSeeAll: onSeeReferences,
+          onImportMore: onImportLink,
+        ),
         // First, and framed as the thing that saves you the typing. Generating
         // from nothing gives you a competent stranger's itinerary; generating
         // from your own saved posts is the reason to use this at all.
-        _card(
-          context,
-          eyebrow: sourceCount > 0 ? 'Read so far' : 'Start from what you saved',
-          eyebrowColor: WayfareColors.accent,
-          title: sourceCount > 0
-              ? '$sourceCount ${sourceCount == 1 ? 'link' : 'links'} in — add another'
-              : 'Paste a link you already saved',
-          cta: sourceCount > 0 ? 'Add another link' : 'Import a link',
-          filled: sourceCount == 0,
-          onTap: onImportLink,
-        ),
-        const SizedBox(height: WayfareSpace.cardGap),
+        // Only until something has been read: after that the card above
+        // carries the count and the way to add more.
+        if (importedPlaces.isEmpty) ...[
+          _card(
+            context,
+            eyebrow: 'Start from what you saved',
+            eyebrowColor: WayfareColors.accent,
+            title: 'Paste a link you already saved',
+            cta: 'Import a link',
+            filled: true,
+            onTap: onImportLink,
+          ),
+          const SizedBox(height: WayfareSpace.cardGap),
+        ],
         _card(
           context,
           eyebrow: 'Have it planned',

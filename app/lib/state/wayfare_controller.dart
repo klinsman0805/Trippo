@@ -73,6 +73,13 @@ class WayfareController extends ChangeNotifier {
   /// to find out.
   int sourceCount = 0;
 
+  /// Every place those imports produced.
+  ///
+  /// Held here for the same reason as the count: importing eight places and
+  /// returning to a screen that looks untouched reads as an import that did
+  /// nothing. The Trip tab names them back.
+  List<Place> importedPlaces = const [];
+
   /// The traveller whose edit sheet is open, if any.
   String? editingMemberId;
 
@@ -169,6 +176,7 @@ class WayfareController extends ChangeNotifier {
       answers = {};
 
       sourceCount = (await _api.listSources(tripId)).length;
+      importedPlaces = sourceCount == 0 ? const [] : await _api.listPlaces(tripId);
 
       final flights = await _api.tripFlights(tripId);
       dateEnvelope = flights.envelope;

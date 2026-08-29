@@ -6,6 +6,7 @@ import '../../../design/tokens.dart';
 import '../../../design/widgets.dart';
 import '../../../models/trip.dart';
 import '../../../state/wayfare_controller.dart';
+import '../formatting.dart';
 
 /// Paste a link; get the places out of it.
 ///
@@ -222,7 +223,16 @@ class _ImportLinkSheetState extends State<ImportLinkSheet> {
           _Notice(text: result.summary!),
         ],
         if (count > 0) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          // Where they went, said plainly. "Import another" next to a list of
+          // places reads as though the places are still waiting to be taken —
+          // they are already on the trip.
+          Text(
+            'Saved to the trip. The planner works from them when it builds '
+            'the itinerary, and they are listed under Your references.',
+            style: WayfareType.body(12.5, color: WayfareColors.mutedLight),
+          ),
+          const SizedBox(height: 14),
           for (final place in result.places.take(8))
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -288,7 +298,7 @@ class _PlaceLine extends StatelessWidget {
               ),
               if (place.category != null)
                 Text(
-                  place.category!,
+                  categoryLabel(place.category!),
                   style: const TextStyle(
                     fontSize: 11.5,
                     color: WayfareColors.mutedLight,
