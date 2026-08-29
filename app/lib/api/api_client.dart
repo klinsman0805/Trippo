@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -104,6 +105,19 @@ class ApiClient {
         statusCode: 0,
         code: 'network_error',
         message: 'Could not reach the server: ${e.message}',
+      );
+    } on TimeoutException {
+      // Every caller handles ApiException and nothing handles this, so a
+      // timeout used to escape the call entirely — leaving the generating
+      // screen up forever with no error and no way back.
+      throw ApiException(
+        statusCode: 0,
+        code: 'timeout',
+        message: timeout.inMinutes >= 1
+            ? 'The server did not answer within '
+                '${timeout.inMinutes} ${timeout.inMinutes == 1 ? 'minute' : 'minutes'}. '
+                'It may still be working — reopen the trip in a moment to see.'
+            : 'The server did not answer within ${timeout.inSeconds} seconds.',
       );
     }
 

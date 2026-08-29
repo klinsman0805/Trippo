@@ -62,28 +62,45 @@ export async function structuredCall(opts: StructuredCallOptions): Promise<unkno
   const ai = gemini();
 
   let response;
+  const startedAt = Date.now();
   try {
-    response = await ai.interactions.create({
-      model,
-      system_instruction: system,
-      input: userContent,
-      response_format: {
-        type: 'text',
-        mime_type: 'application/json',
-        schema,
+    response = await ai.interactions.create(
+      {
+        model,
+        system_instruction: system,
+        input: userContent,
+        response_format: {
+          type: 'text',
+          mime_type: 'application/json',
+          schema,
+        },
+        generation_config: {
+          thinking_level: effort,
+          max_output_tokens: maxOutputTokens,
+        },
       },
-      generation_config: {
-        thinking_level: effort,
-        max_output_tokens: maxOutputTokens,
-      },
-    });
-  } catch (err) {
-    // Surface the provider's own message — quota and key errors are the common
-    // failures here and the text is the actionable part.
-    throw new UpstreamError(
-      'gemini',
-      err instanceof Error ? err.message : 'The model request failed.',
+      // Without this the call has no ceiling. A slow run held the socket open
+      // for as long as the provider felt like taking, the app sat on its
+      // generating screen with nothing to show, and there was no failure
+      // recorded anywhere to explain it.
+      { timeout: env.PLANNER_TIMEOUT_MS, maxRetries: 0 },
     );
+  } catch (err) {
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    const message = err instanceof Error ? err.message : '';
+    // A timeout is a different problem from a rejected key or an exhausted
+    // quota, and the fix is different too, so it says which one happened.
+    if (elapsed * 1000 >= env.PLANNER_TIMEOUT_MS * 0.9) {
+      throw new UpstreamError(
+        'gemini',
+        `The model did not answer within ${Math.round(
+          env.PLANNER_TIMEOUT_MS / 1000,
+        )}s (gave up after ${elapsed}s). It is running slowly right now — trying again often works, and a shorter trip asks less of it.`,
+      );
+    }
+    // Otherwise surface the provider's own message — quota and key errors are
+    // the common failures here and the text is the actionable part.
+    throw new UpstreamError('gemini', message || 'The model request failed.');
   }
 
   const text = response.output_text?.trim();

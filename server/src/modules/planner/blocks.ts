@@ -401,6 +401,10 @@ export function addBlock(tripId: string, day: number, input: BlockInput): Plan {
     // to leave it alone before it is ever asked to replan.
     source: 'user',
     pinned: true,
+    // Written by hand, so it came from no import.
+    from_place_id: null,
+    from_source_title: null,
+    from_place: null,
   });
 
   sortDay(target.blocks);

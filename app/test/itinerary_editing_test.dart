@@ -57,6 +57,8 @@ PlanBlock block({
   num? duration,
   String location = '',
   num? cost,
+  String? fromPlaceId,
+  String? fromSourceTitle,
 }) =>
     PlanBlock(
       id: id,
@@ -71,6 +73,8 @@ PlanBlock block({
       source: source,
       pinned: source == 'user',
       estimatedCostPerPerson: cost,
+      fromPlaceId: fromPlaceId,
+      fromSourceTitle: fromSourceTitle,
     );
 
 /// A controller holding one day: [morningCount] morning activities plus one
@@ -276,6 +280,58 @@ void main() {
       expect(find.text('1h 30m'), findsOneWidget);
       expect(find.textContaining('the card reads free'), findsOneWidget);
       expect(find.text('Optional activity'), findsOneWidget);
+    });
+  });
+
+  group('Where an activity came from', () {
+    testWidgets('a card names the link it traces back to', (tester) async {
+      await pump(
+        tester,
+        ActivityCard(
+          block: block(
+            activity: 'Sunset at the Petronas Twin Towers',
+            fromPlaceId: 'plc_1',
+            fromSourceTitle: '吉隆坡3天2夜旅游攻略',
+          ),
+          members: const [],
+          currency: 'MYR',
+        ),
+      );
+
+      // The clearest evidence that importing a link did anything: the plan
+      // points back at the post it came from.
+      expect(find.text('From your link · 吉隆坡3天2夜旅游攻略'), findsOneWidget);
+    });
+
+    testWidgets('a saved place with no source still says it was yours',
+        (tester) async {
+      await pump(
+        tester,
+        ActivityCard(
+          block: block(fromPlaceId: 'plc_1'),
+          members: const [],
+          currency: 'MYR',
+        ),
+      );
+
+      // Added by hand to the trip's places rather than pulled out of a link.
+      expect(find.text('From a place you saved'), findsOneWidget);
+    });
+
+    testWidgets('an activity the planner chose claims nothing',
+        (tester) async {
+      await pump(
+        tester,
+        ActivityCard(
+          block: block(),
+          members: const [],
+          currency: 'MYR',
+        ),
+      );
+
+      // Attribution is only shown where the server actually recorded one —
+      // a citation the user can see has to be a fact.
+      expect(find.textContaining('From '), findsNothing);
     });
   });
 

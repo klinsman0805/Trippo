@@ -129,6 +129,21 @@ export const BlockSchema = z.object({
    * stays and the planner is freed.
    */
   pinned: z.boolean().default(false),
+  /**
+   * The saved place this came from, when it came from one.
+   *
+   * Filled in server-side after the call by resolving the tag the model cites
+   * — never trusted from the model directly, because a citation the user can
+   * see has to be a fact about our own data, not a claim.
+   */
+  from_place_id: z.string().nullable().default(null),
+  /** The import it was found in, for the card's "From …" line. */
+  from_source_title: z.string().nullable().default(null),
+  /**
+   * What the model said it used. Consumed and cleared during resolution, so it
+   * never reaches the client.
+   */
+  from_place: z.string().nullable().default(null),
 });
 
 export const DaySchema = z.object({
@@ -284,6 +299,11 @@ export const PLAN_JSON_SCHEMA = obj({
           },
           optional: bool,
           weather_backup: nullableStr,
+          from_place: {
+            ...nullableStr,
+            description:
+              'If this block uses one of the SAVED PLACES, its exact [tag] from that list, e.g. "p3". Null for anything you chose yourself.',
+          },
         }),
       },
       notes: nullableStr,

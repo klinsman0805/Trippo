@@ -31,6 +31,7 @@ export function buildPlannerContext(
         'SAVED PLACES (imported by the group from links they shared)',
         [
           'These came from posts, guides and reviews the members saved. Treat them as expressed interest — prefer them over generic attractions, but drop any that do not fit the schedule, budget or a member constraint, and say so in the summary.',
+          'Each is prefixed with a tag in square brackets. When a block you write uses one of these places, set that block\'s `from_place` to the tag exactly as written, e.g. "p3". Leave `from_place` null for anything you chose yourself — a wrong tag is worse than none, because the traveller is shown which of their own links an activity came from.',
           '',
           ...placeBlock,
         ],
@@ -137,6 +138,17 @@ function flightLines(flights: StoredSelection[]): string[] {
   return lines;
 }
 
+/**
+ * The tag the model cites a place by.
+ *
+ * Short and positional rather than the real id: a `plc_9f3c…` in the prompt is
+ * thirty tokens of noise per place and something the model will mistype. The
+ * caller maps the tag back to the real place afterwards.
+ */
+export function placeTag(index: number): string {
+  return `p${index + 1}`;
+}
+
 function placeLines(places: Place[]): string[] {
   if (!places.length) return [];
 
@@ -149,6 +161,10 @@ function placeLines(places: Place[]): string[] {
     else byCity.set(key, [p]);
   }
 
+  // Tags follow the original order, not the grouped one, so the caller can
+  // resolve them by index against the same array it passed in.
+  const tagOf = new Map(places.map((p, i) => [p.id, placeTag(i)]));
+
   const lines: string[] = [];
   for (const [city, group] of byCity) {
     lines.push(`### ${city}`);
@@ -159,7 +175,7 @@ function placeLines(places: Place[]): string[] {
         p.lat != null && p.lng != null ? `(${p.lat.toFixed(4)}, ${p.lng.toFixed(4)})` : null,
         p.why ? `— ${p.why}` : null,
       ].filter(Boolean);
-      lines.push(`- ${p.name} ${bits.join(' ')}`.trimEnd());
+      lines.push(`- [${tagOf.get(p.id)}] ${p.name} ${bits.join(' ')}`.trimEnd());
     }
     lines.push('');
   }

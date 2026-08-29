@@ -164,6 +164,8 @@ class PlanBlock {
     this.startTime,
     this.source = 'planner',
     this.pinned = false,
+    this.fromPlaceId,
+    this.fromSourceTitle,
   });
 
   /// Stable identity. Every edit, move and removal names one of these.
@@ -182,6 +184,16 @@ class PlanBlock {
 
   /// Written by hand rather than planned.
   bool get isMine => source == 'user';
+
+  /// The saved place this came from, when the planner used one.
+  final String? fromPlaceId;
+
+  /// The import that place was found in — the card's "From …" line. Null when
+  /// the place was added by hand rather than pulled out of a link.
+  final String? fromSourceTitle;
+
+  /// Whether this activity traces back to something the user saved.
+  bool get isFromReference => fromPlaceId != null;
   final String activity;
   final String description;
   final String location;
@@ -208,6 +220,8 @@ class PlanBlock {
         suitedForMembers: _strings(json['suited_for_members']),
         optional: json['optional'] as bool? ?? false,
         weatherBackup: json['weather_backup'] as String?,
+        fromPlaceId: json['from_place_id'] as String?,
+        fromSourceTitle: json['from_source_title'] as String?,
       );
 }
 

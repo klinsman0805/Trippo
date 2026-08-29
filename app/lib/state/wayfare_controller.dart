@@ -606,10 +606,14 @@ class WayfareController extends ChangeNotifier {
         failure = null;
       }
       if (failure == null) error = e.message;
+    } catch (e) {
+      // Nothing may escape: an unhandled throw here leaves `generating` true,
+      // and the generating screen covers the whole app with no way out of it.
+      error = 'Planning stopped unexpectedly: $e';
+    } finally {
+      generating = false;
+      notifyListeners();
     }
-
-    generating = false;
-    notifyListeners();
   }
 
   /// Send one Refine turn.

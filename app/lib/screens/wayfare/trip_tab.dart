@@ -427,6 +427,14 @@ class ActivityCard extends StatelessWidget {
               style: WayfareType.body(13.5, color: WayfareColors.muted),
             ),
           ],
+          // Where it came from, when it came from something the user saved.
+          // This is the app's own claim about its own data — the server only
+          // records it when a saved place is actually named — and it is the
+          // clearest evidence that importing a link did something.
+          if (block.isFromReference) ...[
+            const SizedBox(height: 9),
+            _fromReference(),
+          ],
           if (_hasFooter) ...[
             const SizedBox(height: 11),
             _footer(fit),
@@ -444,6 +452,34 @@ class ActivityCard extends StatelessWidget {
         strokeWidth: 1.5,
       ),
       child: card,
+    );
+  }
+
+  /// `From the 小红书 post you saved` — the source, named.
+  Widget _fromReference() {
+    final title = block.fromSourceTitle;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.link, size: 13, color: WayfareColors.accent),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            title == null
+                ? 'From a place you saved'
+                : 'From your link · $title',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.3,
+              color: WayfareColors.accent,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

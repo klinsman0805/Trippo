@@ -30,6 +30,14 @@ const EnvSchema = z.object({
   // Free keys come from https://aistudio.google.com/apikey
   GEMINI_API_KEY: z.string().optional(),
   PLANNER_MODEL: z.string().default('gemini-3.7-flash'),
+  /**
+   * How long to wait on one model call before giving up, in milliseconds.
+   *
+   * Deliberately shorter than the client's own patience, so a slow run comes
+   * back as a recorded failure with a retry rather than as a request the app
+   * eventually abandons while the server is still working on it.
+   */
+  PLANNER_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
   PLANNER_EFFORT: z.enum(['minimal', 'low', 'medium', 'high']).default('high'),
   /** Cheaper model for mechanical work like pulling places out of a page. */
   EXTRACTION_MODEL: z.string().default('gemini-3.5-flash-lite'),
