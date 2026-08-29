@@ -12,6 +12,7 @@ import '../../models/plan.dart';
 import '../../models/trip.dart';
 import '../../state/wayfare_controller.dart';
 import 'budget_tab.dart';
+import 'currency_picker.dart';
 import 'flights/booked_flight_screen.dart';
 import 'flights/flights_screen.dart';
 import 'formatting.dart';
@@ -546,6 +547,64 @@ class _WayfareShellState extends State<WayfareShell> {
     await _controller.setDestination(value);
   }
 
+  /// What the trip's money is counted in.
+  Future<void> _setCurrency() async {
+    var picked = _controller.trip?.currency ?? 'USD';
+
+    final value = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => AlertDialog(
+          backgroundColor: WayfareColors.surface,
+          title: Text('Currency', style: WayfareType.display(24)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Every figure on the trip is shown in this. Changing it '
+                  'relabels what is already planned — it does not convert the '
+                  'amounts.',
+                  style: WayfareType.body(12.5, color: WayfareColors.mutedLight),
+                ),
+                const SizedBox(height: 14),
+                CurrencyPicker(
+                  value: picked,
+                  onChanged: (v) => setSheetState(() => picked = v),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: WayfareColors.mutedLight),
+              ),
+            ),
+            TextButton(
+              onPressed:
+                  picked.length == 3 ? () => Navigator.pop(ctx, picked) : null,
+              child: Text(
+                'Save',
+                style: TextStyle(
+                  color: picked.length == 3
+                      ? WayfareColors.accent
+                      : WayfareColors.mutedLight,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (value == null || value.length != 3) return;
+    await _controller.setCurrency(value);
+  }
+
   /// Removing the day currently on screen.
   ///
   /// Irreversible and it takes whatever is on the day, so it names the loss
@@ -654,6 +713,16 @@ class _WayfareShellState extends State<WayfareShell> {
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 _setDestination();
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.payments_outlined, color: WayfareColors.ink),
+              title: const Text('Currency'),
+              subtitle: Text(_controller.trip?.currency ?? 'USD'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _setCurrency();
               },
             ),
             ListTile(

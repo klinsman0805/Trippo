@@ -325,6 +325,24 @@ class WayfareController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// What every figure on the trip is denominated in.
+  ///
+  /// Stored plans carry a copy for the Budget tab, and the server re-syncs
+  /// that on read, so changing it here reaches plans generated before it.
+  Future<void> setCurrency(String currency) async {
+    try {
+      trip = await _api.updateTrip(tripId, {'currency': currency});
+      // The plan holds its own copy; re-read it rather than showing old money
+      // beside the new code.
+      final latest = await _api.latestPlan(tripId);
+      plan = latest.plan?.plan ?? plan;
+      error = null;
+    } on ApiException catch (e) {
+      error = e.message;
+    }
+    notifyListeners();
+  }
+
   /// Links, posts and articles imported into this trip.
   Future<List<TripSource>> sources() => _api.listSources(tripId);
 

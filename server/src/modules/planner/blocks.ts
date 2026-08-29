@@ -232,6 +232,18 @@ export function reconcileDays(tripId: string): Plan | null {
 
   let changed = healSlots(plan);
 
+  // The trip owns its currency; the plan carries a copy for the Budget tab.
+  // Changing it on the trip has to reach plans already stored, or the figures
+  // stay denominated in whatever was set when they were generated.
+  if (plan.trip.currency !== trip.currency) {
+    plan.trip.currency = trip.currency;
+    changed = true;
+  }
+  if (plan.trip.total_budget !== trip.total_budget) {
+    plan.trip.total_budget = trip.total_budget;
+    changed = true;
+  }
+
   const wanted = dates.length;
   const have = plan.itinerary.length;
   // No dates on the trip means nothing to reconcile against — a hand-built

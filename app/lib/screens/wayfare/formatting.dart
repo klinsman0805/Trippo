@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 import '../../design/tokens.dart';
@@ -19,6 +21,37 @@ const _symbols = <String, String>{
   'HKD': 'HK\$',
   'TWD': 'NT\$',
 };
+
+/// The currencies offered when picking one, in the order they are shown.
+///
+/// The same set the app can print a symbol for. Anything outside it still
+/// works — the code is typed in and rendered as the code — so this is a
+/// shortlist, not a restriction.
+const wayfareCurrencies = <String>[
+  'MYR', 'SGD', 'THB', 'JPY', 'USD', 'EUR',
+  'GBP', 'AUD', 'CNY', 'HKD', 'KRW', 'TWD',
+];
+
+/// The currency of the device's own region, when we recognise it.
+///
+/// A better first guess than a fixed default — someone in Malaysia planning
+/// Bangkok is more likely to be counting in ringgit than in dollars — and it
+/// is shown as a selected chip, so a wrong guess is visible and one tap from
+/// being right.
+String localCurrency() {
+  final region = ui.PlatformDispatcher.instance.locale.countryCode;
+  return _byRegion[region?.toUpperCase()] ?? 'USD';
+}
+
+const _byRegion = <String, String>{
+  'MY': 'MYR', 'SG': 'SGD', 'TH': 'THB', 'JP': 'JPY', 'CN': 'CNY',
+  'HK': 'HKD', 'TW': 'TWD', 'KR': 'KRW', 'AU': 'AUD', 'GB': 'GBP',
+  'US': 'USD', 'ID': 'IDR', 'VN': 'VND', 'PH': 'PHP', 'IN': 'INR',
+};
+
+/// `RM` for MYR, `€` for EUR — the code itself when we have no symbol.
+String currencySymbol(String code) =>
+    _symbols[code.toUpperCase()] ?? code.toUpperCase();
 
 /// `€4,207` — rounded, grouped, no decimals, as every figure in the design.
 String formatMoney(num value, String currency) {

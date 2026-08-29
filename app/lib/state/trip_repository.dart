@@ -56,8 +56,16 @@ class TripListRepository extends ChangeNotifier {
   bool get mapsAvailable => features['maps'] == true;
   bool get flightsAreEstimatesOnly => features['flight_provider'] == 'mock';
 
-  Future<Trip> create(String title, {List<String> destinations = const []}) async {
-    final trip = await _api.createTrip(title: title, destinations: destinations);
+  Future<Trip> create(
+    String title, {
+    List<String> destinations = const [],
+    String currency = 'USD',
+  }) async {
+    final trip = await _api.createTrip(
+      title: title,
+      destinations: destinations,
+      currency: currency,
+    );
     await load();
     return trip;
   }

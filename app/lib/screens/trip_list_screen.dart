@@ -7,6 +7,7 @@ import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../models/trip.dart';
 import '../state/trip_repository.dart';
+import 'wayfare/currency_picker.dart';
 import 'wayfare/formatting.dart';
 
 /// Trip picker, shown before the four-tab shell.
@@ -54,15 +55,16 @@ class _TripListScreenState extends State<TripListScreen> {
   /// could not be reached at all. The place you are going is the one thing the
   /// planner cannot work without, so it is the one thing this asks for.
   Future<void> _createTrip() async {
-    final destination = await showDialog<String>(
+    final answer = await showDialog<({String destination, String currency})>(
       context: context,
       builder: (ctx) => const _NewTripDialog(),
     );
 
-    if (destination == null || destination.isEmpty) return;
+    if (answer == null || answer.destination.isEmpty) return;
     final trip = await _repo.create(
-      destination,
-      destinations: [destination],
+      answer.destination,
+      destinations: [answer.destination],
+      currency: answer.currency,
     );
     if (mounted) widget.onOpenTrip(context, trip.id);
   }
@@ -190,8 +192,12 @@ class _TripListScreenState extends State<TripListScreen> {
   }
 }
 
-/// Where are you going — the only question standing between a new trip and a
-/// generated itinerary.
+/// Where are you going, and in what money.
+///
+/// Two questions, because both are things the app cannot work out for itself
+/// and cannot sensibly default: a destination is what the planner needs to run
+/// at all, and a currency silently defaulting to USD priced a Kuala Lumpur
+/// trip in dollars.
 class _NewTripDialog extends StatefulWidget {
   const _NewTripDialog();
 
@@ -202,6 +208,10 @@ class _NewTripDialog extends StatefulWidget {
 class _NewTripDialogState extends State<_NewTripDialog> {
   final _controller = TextEditingController();
 
+  /// Seeded from the device's own region, which is right more often than any
+  /// fixed default and wrong in a way the user can see and change.
+  String _currency = localCurrency();
+
   @override
   void dispose() {
     _controller.dispose();
@@ -209,10 +219,11 @@ class _NewTripDialogState extends State<_NewTripDialog> {
   }
 
   String get _value => _controller.text.trim();
+  bool get _canSubmit => _value.isNotEmpty && _currency.length == 3;
 
   void _submit() {
-    if (_value.isEmpty) return;
-    Navigator.pop(context, _value);
+    if (!_canSubmit) return;
+    Navigator.pop(context, (destination: _value, currency: _currency));
   }
 
   @override
@@ -220,7 +231,10 @@ class _NewTripDialogState extends State<_NewTripDialog> {
     return AlertDialog(
       backgroundColor: WayfareColors.surface,
       title: Text('Where are you going?', style: WayfareType.display(24)),
-      content: Column(
+      // The currency chips need the room, and a dialog will not scroll on its
+      // own — on a short screen this would otherwise overflow.
+      content: SingleChildScrollView(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -231,13 +245,24 @@ class _NewTripDialogState extends State<_NewTripDialog> {
             onChanged: (_) => setState(() {}),
             onSubmitted: (_) => _submit(),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             'The trip takes this as its name. You can rename it later — the '
             'planner needs somewhere to go before it can plan anything.',
             style: WayfareType.body(12.5, color: WayfareColors.mutedLight),
           ),
+          const SizedBox(height: 18),
+          Text(
+            'Money',
+            style: WayfareType.eyebrow(11.5, color: WayfareColors.muted),
+          ),
+          const SizedBox(height: 8),
+          CurrencyPicker(
+            value: _currency,
+            onChanged: (v) => setState(() => _currency = v),
+          ),
         ],
+        ),
       ),
       actions: [
         TextButton(
@@ -250,13 +275,13 @@ class _NewTripDialogState extends State<_NewTripDialog> {
         TextButton(
           // Dead until there is a destination, rather than creating a trip
           // that cannot be planned.
-          onPressed: _value.isEmpty ? null : _submit,
+          onPressed: _canSubmit ? _submit : null,
           child: Text(
             'Create',
             style: TextStyle(
-              color: _value.isEmpty
-                  ? WayfareColors.mutedLight
-                  : WayfareColors.accent,
+              color: _canSubmit
+                  ? WayfareColors.accent
+                  : WayfareColors.mutedLight,
             ),
           ),
         ),

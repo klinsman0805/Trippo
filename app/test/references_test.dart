@@ -66,7 +66,8 @@ void main() {
       return TrippoApi(ApiClient(baseUrl: 'http://stub', client: client));
     }
 
-    testWidgets('asks where, and stores it as the destination', (tester) async {
+    testWidgets('asks where and in what money, and stores both',
+        (tester) async {
       await wrap(
         tester,
         TripListScreen(api: stubbedApi(), onOpenTrip: (_, _) {}),
@@ -76,7 +77,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Where are you going?'), findsOneWidget);
-      await tester.enterText(find.byType(TextField), 'Bangkok');
+      await tester.enterText(find.byType(TextField).first, 'Bangkok');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('฿ THB'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Create'));
       await tester.pumpAndSettle();
@@ -86,6 +89,9 @@ void main() {
       // impossible to plan.
       expect(created.single['destinations'], ['Bangkok']);
       expect(created.single['title'], 'Bangkok');
+      // And currency defaulted to USD in silence, which priced a Kuala
+      // Lumpur trip in dollars.
+      expect(created.single['currency'], 'THB');
     });
 
     testWidgets('will not create one with nowhere to go', (tester) async {
@@ -102,7 +108,7 @@ void main() {
       );
       expect(create.onPressed, isNull);
 
-      await tester.enterText(find.byType(TextField), 'Bangkok');
+      await tester.enterText(find.byType(TextField).first, 'Bangkok');
       await tester.pumpAndSettle();
       expect(
         tester
@@ -110,6 +116,30 @@ void main() {
             .onPressed,
         isNotNull,
       );
+    });
+
+    testWidgets('a currency outside the shortlist can still be typed',
+        (tester) async {
+      await wrap(
+        tester,
+        TripListScreen(api: stubbedApi(), onOpenTrip: (_, _) {}),
+      );
+
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Hanoi');
+      await tester.pumpAndSettle();
+
+      // The shortlist is a shortcut, not a restriction — a trip to somewhere
+      // outside it must not be unplannable.
+      await tester.tap(find.text('Other'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'vnd');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      expect(created.single['currency'], 'VND');
     });
   });
 
