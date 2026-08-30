@@ -305,7 +305,7 @@ class WayfareController extends ChangeNotifier {
   /// day that is perfectly fine.
   Future<void> setDatesByHand(DateTime start, DateTime end) async {
     try {
-      trip = await _api.updateTrip(tripId, {
+      await _api.updateTrip(tripId, {
         'start_date': _isoDate(start),
         'end_date': _isoDate(end),
         'date_flexible': false,
@@ -313,8 +313,16 @@ class WayfareController extends ChangeNotifier {
       error = null;
     } on ApiException catch (e) {
       error = e.message;
+      notifyListeners();
+      return;
     }
-    notifyListeners();
+
+    // Everything downstream of the dates has to move with them: the server
+    // adds or trims days and renumbers the rest on read, and the envelope
+    // behind any short-day band was derived against the range that just
+    // changed. Patching the trip alone left an itinerary of the old length
+    // and warnings about days that no longer exist.
+    await load();
   }
 
   /// Where the trip is going.

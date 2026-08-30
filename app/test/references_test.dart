@@ -607,4 +607,97 @@ void main() {
       );
     });
   });
+
+  group('Changing the dates', () {
+    testWidgets('reloads, so the itinerary follows the new range',
+        (tester) async {
+      var days = 3;
+      final calls = <String>[];
+
+      final client = MockClient((request) async {
+        calls.add('${request.method} ${request.url.path}');
+        if (request.method == 'PATCH') {
+          days = 5; // The server grows the trip; the plan follows on read.
+          return http.Response(
+            jsonEncode({
+              'trip': {
+                'id': 'trip_1',
+                'title': 'Bangkok',
+                'destinations': ['Bangkok'],
+                'currency': 'THB',
+                'start_date': '2026-09-26',
+                'end_date': '2026-09-30',
+                'member_count': 0,
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/v1/trips/trip_1') {
+          return http.Response(
+            jsonEncode({
+              'trip': {
+                'id': 'trip_1',
+                'title': 'Bangkok',
+                'destinations': ['Bangkok'],
+                'currency': 'THB',
+                'start_date': '2026-09-26',
+                'end_date': '2026-09-30',
+                'member_count': 0,
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path.endsWith('/plan')) {
+          return http.Response(
+            jsonEncode({
+              'plan': {
+                'id': 'plan_1',
+                'revision': 1,
+                'created_at': '2026-09-01T00:00:00.000Z',
+                'plan': {
+                  'conversational_summary': '',
+                  'status': 'complete',
+                  'trip': {'currency': 'THB'},
+                  'itinerary': [
+                    for (var d = 1; d <= days; d++)
+                      {'day': d, 'location': 'Bangkok', 'blocks': <dynamic>[]},
+                  ],
+                },
+              },
+            }),
+            200,
+          );
+        }
+        // A reload touches several endpoints; each wants its own key.
+        return http.Response(
+          jsonEncode({
+            'messages': <dynamic>[],
+            'sources': <dynamic>[],
+            'places': <dynamic>[],
+            'selections': <dynamic>[],
+            'failure': null,
+          }),
+          200,
+        );
+      });
+
+      final controller = WayfareController(
+        TrippoApi(ApiClient(baseUrl: 'http://stub', client: client)),
+        'trip_1',
+      );
+
+      await controller.setDatesByHand(
+        DateTime(2026, 9, 26),
+        DateTime(2026, 9, 30),
+      );
+
+      // Patching the trip alone left an itinerary of the old length on
+      // screen, and any short-day band still describing the old range.
+      expect(calls.first, 'PATCH /v1/trips/trip_1');
+      expect(calls.any((c) => c.endsWith('/plan')), isTrue);
+      expect(controller.plan!.itinerary.length, 5);
+    });
+  });
 }

@@ -158,6 +158,20 @@ class _WayfareShellState extends State<WayfareShell> {
   /// The trip has days to plan into.
   bool get _hasDates => _controller.trip?.startDate != null;
 
+  /// `1 Sept–3 Sept · 3 days` — what the row is about to change.
+  String _dateRangeLabel() {
+    final trip = _controller.trip;
+    final range = [
+      formatShortDate(trip?.startDate),
+      formatShortDate(trip?.endDate),
+    ].where((d) => d.isNotEmpty).join('–');
+    final days = _controller.plan?.itinerary.length ?? 0;
+    if (range.isEmpty) return 'Not set';
+    return days > 0
+        ? '$range · $days ${days == 1 ? 'day' : 'days'}'
+        : range;
+  }
+
   bool get _bodyScrollsItself =>
       _controller.tab == WayfareTab.itinerary &&
       _controller.hasPlan &&
@@ -781,39 +795,32 @@ class _WayfareShellState extends State<WayfareShell> {
                   _openSources();
                 },
               ),
-            if (_controller.hasPlan)
-              ListTile(
-                leading: const Icon(Icons.confirmation_number_outlined,
-                    color: WayfareColors.ink),
-                title: const Text('I have my flight booked'),
-                subtitle: const Text('Set the dates from a flight number'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  _openBookedFlight();
-                },
-              ),
-              if (WayfareFeatures.flightSearch)
-                ListTile(
-                  leading:
-                      const Icon(Icons.flight_takeoff, color: WayfareColors.ink),
-                  title: const Text('Search flights'),
-                  subtitle: const Text('Picking flights sets the trip dates'),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _openFlights();
-                  },
-                ),
+            // Once the trip has days, the two ways of *setting* dates are
+            // both answering a question that has been answered. What is left
+            // is changing them, which is one row rather than two.
             if (_controller.hasPlan)
               ListTile(
                 leading:
                     const Icon(Icons.event_outlined, color: WayfareColors.ink),
-                title: const Text('Set dates myself'),
-                subtitle: const Text('For trips that do not involve a flight'),
+                title: const Text('Edit dates'),
+                subtitle: Text(_dateRangeLabel()),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _pickDatesByHand();
                 },
               ),
+            if (WayfareFeatures.flightSearch)
+              ListTile(
+                leading:
+                    const Icon(Icons.flight_takeoff, color: WayfareColors.ink),
+                title: const Text('Search flights'),
+                subtitle: const Text('Picking flights sets the trip dates'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _openFlights();
+                },
+              ),
+
             // Editing lives here too, so a day can be changed from anywhere
             // rather than only from the button at the end of it.
             if (_controller.hasPlan)
