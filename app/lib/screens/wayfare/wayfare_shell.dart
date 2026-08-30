@@ -1624,12 +1624,11 @@ class ItineraryStartOptions extends StatelessWidget {
         if (importedPlaces.isEmpty) ...[
           _card(
             context,
-            eyebrow: 'Quickest',
+            eyebrow: 'Fastest',
             eyebrowColor: WayfareColors.accent,
-            title: 'You have probably found the places already',
-            body: 'A 小红书 post, a saved list, a blog you bookmarked. Paste '
-                'it and we pull the places out, so the plan is built from '
-                'what you actually want to see.',
+            title: "You've already found the places",
+            body: 'A 小红书 post, a saved list, a bookmarked blog. Paste it — '
+                "we'll pull the places out.",
             cta: 'Paste a link',
             filled: true,
             onTap: onImportLink,
@@ -1641,13 +1640,10 @@ class ItineraryStartOptions extends StatelessWidget {
           eyebrow: 'Hands off',
           eyebrowColor: WayfareColors.accent,
           title: dayCount > 0
-              ? 'Let the planner take the $dayCount days'
-              : 'Let the planner take it from here',
-          body: sourceCount > 0
-              ? 'It works from the places you saved, fills the gaps around '
-                  'them, and you can change anything afterwards.'
-              : 'It picks somewhere to start, works around your dates, and '
-                  'you can change anything afterwards.',
+              ? 'Let us take the $dayCount days'
+              : 'Let us take it from here',
+          body: 'We pick a starting point and fit it to your dates. Change '
+              'anything after.',
           cta: 'Plan it for me',
           filled: sourceCount > 0,
           onTap: canGenerate ? onGenerate : null,
@@ -1658,9 +1654,8 @@ class ItineraryStartOptions extends StatelessWidget {
           eyebrow: 'Hands on',
           eyebrowColor: WayfareColors.writtenInk,
           title: 'Start with the one thing you know',
-          body: 'The dinner you booked, the flight you are meeting. Put it '
-              'down and build outwards — the planner can still fill the rest '
-              'later.',
+          body: "A dinner booked, a flight you're meeting. Drop it in, build "
+              'outwards.',
           cta: 'Add an activity',
           filled: false,
           onTap: onWriteFirst,
