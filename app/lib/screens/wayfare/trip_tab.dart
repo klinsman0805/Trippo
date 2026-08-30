@@ -119,14 +119,11 @@ class _TripTabState extends State<TripTab> {
 
   /// One day, scrolling on its own so the pager above it stays a fixed height.
   Widget _dayPage(BuildContext context, PlanDay day, String currency) {
-    final theme = WayfareTheme.of(context);
-
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
       child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (controller.updatedDay == day.day) _updatedNotice(theme),
                 if (controller.dateEnvelope?.shortDayFor(day.day) case final short?)
                   ShortDayBand(
                     short: short,
@@ -234,26 +231,6 @@ class _TripTabState extends State<TripTab> {
             const SizedBox(width: 8),
           ],
         ],
-      ),
-    );
-  }
-
-  Widget _updatedNotice(WayfareTheme theme) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      decoration: BoxDecoration(
-        color: WayfareColors.infoBgAlt,
-        borderRadius: theme.card,
-        border: Border.all(color: WayfareColors.infoBorderAlt),
-      ),
-      child: const Text(
-        'Updated from your last chat request.',
-        style: TextStyle(
-          fontSize: 13,
-          color: WayfareColors.infoText,
-          height: 1.45,
-        ),
       ),
     );
   }

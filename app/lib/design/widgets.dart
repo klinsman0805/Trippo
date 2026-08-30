@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -207,22 +209,53 @@ class _WayfareDismissibleSheetState extends State<WayfareDismissibleSheet>
 /// navigation — so an explanation of why a tab is unavailable appeared on top
 /// of the tab it was explaining. This comes down from the top, clear of
 /// everything, and leaves on its own.
-Future<void> showWayfareToast(BuildContext context, String message) async {
+/// One at a time: tapping a dimmed tab four times shows one message, not four
+/// stacked on top of each other. A repeat restarts the countdown, so the toast
+/// stays up while it is still being provoked.
+_ToastHandle? _liveToast;
+
+void showWayfareToast(BuildContext context, String message) {
+  final live = _liveToast;
+  if (live != null && live.entry.mounted) {
+    live.state.currentState?.refresh(message);
+    return;
+  }
+
   final overlay = Overlay.maybeOf(context);
   if (overlay == null) return;
 
-  final entry = OverlayEntry(
-    builder: (context) => _WayfareToast(message: message),
+  final key = GlobalKey<_WayfareToastState>();
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (context) => _WayfareToast(
+      key: key,
+      message: message,
+      onFinished: () {
+        if (entry.mounted) entry.remove();
+        if (identical(_liveToast?.entry, entry)) _liveToast = null;
+      },
+    ),
   );
+  _liveToast = _ToastHandle(entry, key);
   overlay.insert(entry);
-  await Future<void>.delayed(const Duration(milliseconds: 3400));
-  entry.remove();
+}
+
+class _ToastHandle {
+  const _ToastHandle(this.entry, this.state);
+
+  final OverlayEntry entry;
+  final GlobalKey<_WayfareToastState> state;
 }
 
 class _WayfareToast extends StatefulWidget {
-  const _WayfareToast({required this.message});
+  const _WayfareToast({
+    super.key,
+    required this.message,
+    required this.onFinished,
+  });
 
   final String message;
+  final VoidCallback onFinished;
 
   @override
   State<_WayfareToast> createState() => _WayfareToastState();
@@ -235,19 +268,38 @@ class _WayfareToastState extends State<_WayfareToast>
     duration: const Duration(milliseconds: 260),
   );
 
+  static const _holdFor = Duration(milliseconds: 3000);
+
+  late String _message = widget.message;
+  Timer? _leave;
+
   @override
   void initState() {
     super.initState();
     _in.forward();
-    // Starts leaving before the entry is removed, so it fades rather than
-    // vanishing mid-sentence.
-    Future<void>.delayed(const Duration(milliseconds: 3000), () {
-      if (mounted) _in.reverse();
+    _scheduleLeave();
+  }
+
+  void _scheduleLeave() {
+    _leave?.cancel();
+    _leave = Timer(_holdFor, () async {
+      if (!mounted) return;
+      await _in.reverse();
+      if (mounted) widget.onFinished();
     });
+  }
+
+  /// A repeat tap while this is up: same toast, new words, fresh countdown.
+  void refresh(String message) {
+    if (!mounted) return;
+    setState(() => _message = message);
+    _in.forward();
+    _scheduleLeave();
   }
 
   @override
   void dispose() {
+    _leave?.cancel();
     _in.dispose();
     super.dispose();
   }
@@ -274,7 +326,7 @@ class _WayfareToastState extends State<_WayfareToast>
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
               child: Text(
-                widget.message,
+                _message,
                 style: const TextStyle(
                   fontSize: 13.5,
                   height: 1.4,

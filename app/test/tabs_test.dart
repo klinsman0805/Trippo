@@ -282,7 +282,7 @@ void main() {
       expect(find.text('Everyone'), findsNothing);
     });
 
-    testWidgets('shows the updated notice only on the changed day',
+    testWidgets('does not announce which day a refinement changed',
         (tester) async {
       final controller = buildController(
         members: const [_maya, _ruth],
@@ -296,11 +296,15 @@ void main() {
           onRemoveActivity: (_) {},
         ), scrollable: false);
 
-      expect(find.text('Updated from your last chat request.'), findsOneWidget);
+      // The banner said nothing the day itself did not already show, on a
+      // screen the user had just arrived at deliberately. The jump to the
+      // changed day survives; the notice about it does not.
+      expect(
+        find.textContaining('Updated from your last chat request'),
+        findsNothing,
+      );
     });
-  });
 
-  group('Budget tab', () {
     testWidgets('over budget shows the overspend and both bar sets',
         (tester) async {
       final controller = buildController(

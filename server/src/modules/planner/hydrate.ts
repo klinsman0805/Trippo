@@ -30,12 +30,16 @@ export function hydrate(
     for (const alias of aliases(place.name)) byName.set(alias, place);
   }
 
-  const itinerary = draft.itinerary.map((day) => ({
+  // Dates are the trip's, applied by position: the model has no better source
+  // for them than the range we gave it. They were left null here and filled in
+  // by `reconcileDays` on read — which meant a freshly generated plan came
+  // back from the POST with no dates on any day, and only grew them once the
+  // trip was reopened.
+  const dates = datesFrom(trip.start_date, draft.itinerary.length);
+
+  const itinerary = draft.itinerary.map((day, index) => ({
     day: day.day,
-    // Dates are the trip's, applied by position. The model has no better
-    // source for them than the range we gave it, and every mistake it could
-    // make here is one `reconcileDays` would immediately have to undo.
-    date: null as string | null,
+    date: dates[index] ?? null,
     location: trip.destinations[0] ?? '',
     lodging_area_suggestion: day.lodging_area_suggestion,
     notes: day.notes,
@@ -144,6 +148,16 @@ export function toDraftView(
       written_by_traveller: block.source === 'user' ? true : undefined,
     })),
   }));
+}
+
+/** [count] consecutive ISO dates from [start], or nothing if there is no start. */
+function datesFrom(start: string | null, count: number): (string | null)[] {
+  if (!start) return [];
+  const from = Date.parse(`${start}T00:00:00Z`);
+  if (!Number.isFinite(from)) return [];
+  return Array.from({ length: count }, (_, i) =>
+    new Date(from + i * 86_400_000).toISOString().slice(0, 10),
+  );
 }
 
 /** A saved place named in the block's title or venue, if there is one. */
