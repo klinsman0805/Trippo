@@ -71,7 +71,7 @@ class _StatusHero extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             over
-                ? 'Lodging and activities pushed it. Dropping a couple of optional stops covers the gap.'
+                ? 'Accommodation and activities pushed it. Dropping a couple of optional stops covers the gap.'
                 : 'Comfortably inside the budget, with the buffer intact.',
             style: WayfareType.body(13.5, color: WayfareColors.inkSecondary),
           ),
@@ -190,7 +190,7 @@ class _CategoryRow extends StatelessWidget {
           textBaseline: TextBaseline.alphabetic,
           children: [
             Text(
-              _capitalize(category.name),
+              _capitalize(categoryLabel(category.name)),
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
             const Spacer(),

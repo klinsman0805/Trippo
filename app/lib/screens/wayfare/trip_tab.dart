@@ -41,21 +41,46 @@ class TripTab extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _dayChips(context, plan),
-        // wp-slide: content re-enters when the day changes.
+        // The day's content enters from the side you came from, so moving
+        // through the trip reads as movement rather than as a redraw.
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: SlideTransition(
-                position: Tween(
-                  begin: const Offset(0.035, 0),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: child,
-              ),
+          child: AnimatedSize(
+            // Days differ in height, and without this the page below them
+            // jumps the instant the new day is laid out.
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 280),
+            switchInCurve: Curves.easeOutCubic,
+            // The outgoing day leaves in the first third. Fading both across
+            // the full duration muddies the middle, where two days are drawn
+            // on top of each other at half opacity.
+            switchOutCurve: const Interval(0, 0.35, curve: Curves.easeIn),
+            // Top-aligned: the default centres the two children on each other,
+            // so a short day and a long one slide vertically past each other
+            // as well as sideways.
+            layoutBuilder: (current, previous) => Stack(
+              alignment: Alignment.topLeft,
+              children: [...previous, ?current],
             ),
+            transitionBuilder: (child, animation) {
+              final incoming = child.key == ValueKey(controller.selectedDay);
+              final from = controller.dayDirection == 0
+                  ? 0.0
+                  : controller.dayDirection * (incoming ? 0.06 : -0.06);
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween(
+                    begin: Offset(from, 0),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              );
+            },
             child: Column(
               key: ValueKey(controller.selectedDay),
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,6 +133,7 @@ class TripTab extends StatelessWidget {
                   const SizedBox(height: 10),
                 ],
               ],
+            ),
             ),
           ),
         ),
@@ -386,7 +412,34 @@ class ActivityCard extends StatelessWidget {
   bool get _hasFooter =>
       members.isNotEmpty ||
       (block.estimatedDurationMinutes ?? 0) > 0 ||
-      block.location.trim().isNotEmpty;
+      _venue.isNotEmpty;
+
+  /// The venue, unless it is the title again.
+  ///
+  /// A cited place with no street address stores its own name as the venue, so
+  /// the footer printed the card's heading back at it word for word.
+  String get _venue {
+    final venue = block.location.trim();
+    return venue.toLowerCase() == block.activity.trim().toLowerCase()
+        ? ''
+        : venue;
+  }
+
+  /// The description, unless it says nothing the title has not.
+  ///
+  /// The extractor writes a generic line for most places — "Recommended
+  /// shopping mall." under a card already headed Pavilion Bukit Bintang — and
+  /// a sentence that adds nothing costs a line on every card in the day.
+  String get _description {
+    final text = block.description.trim();
+    if (text.isEmpty) return '';
+    final stripped = text.toLowerCase().replaceAll(RegExp(r'[.\s]+$'), '');
+    return _generic.hasMatch(stripped) ? '' : text;
+  }
+
+  static final _generic = RegExp(
+    r'^(a )?(recommended|must-visit|popular|suggested)\b[^.]*$',
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -420,20 +473,12 @@ class ActivityCard extends StatelessWidget {
           // A hand-written activity often has no description, and an empty
           // Text still claims a line — which left a hollow gap in the middle
           // of every card typed in a hurry.
-          if (block.description.trim().isNotEmpty) ...[
+          if (_description.isNotEmpty) ...[
             const SizedBox(height: 7),
             Text(
-              block.description,
+              _description,
               style: WayfareType.body(13.5, color: WayfareColors.muted),
             ),
-          ],
-          // Where it came from, when it came from something the user saved.
-          // This is the app's own claim about its own data — the server only
-          // records it when a saved place is actually named — and it is the
-          // clearest evidence that importing a link did something.
-          if (block.isFromReference) ...[
-            const SizedBox(height: 9),
-            _fromReference(),
           ],
           if (_hasFooter) ...[
             const SizedBox(height: 11),
@@ -452,34 +497,6 @@ class ActivityCard extends StatelessWidget {
         strokeWidth: 1.5,
       ),
       child: card,
-    );
-  }
-
-  /// `From the 小红书 post you saved` — the source, named.
-  Widget _fromReference() {
-    final title = block.fromSourceTitle;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(Icons.link, size: 13, color: WayfareColors.accent),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            title == null
-                ? 'From a place you saved'
-                : 'From your link · $title',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12,
-              height: 1.3,
-              color: WayfareColors.accent,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -512,11 +529,6 @@ class ActivityCard extends StatelessWidget {
           block.timeOfDay.name.toUpperCase(),
           style: WayfareType.eyebrow(11.5, color: const Color(0xFF6D6255)),
         ),
-        const Spacer(),
-        Text(
-          formatBlockCost(block.estimatedCostPerPerson, currency),
-          style: const TextStyle(fontSize: 12.5, color: WayfareColors.mutedLight),
-        ),
       ],
     );
   }
@@ -540,6 +552,21 @@ class ActivityCard extends StatelessWidget {
         ),
         if (block.optional) WayfarePill.optional(),
         if (WayfareFeatures.groups && block.isMine) WayfarePill.yours(),
+        // Provenance, reduced to a mark. The named source took a whole line
+        // on every card; this keeps the fact that an activity came from
+        // something the traveller saved without spending a row on it. The
+        // source is named in full on the activity itself.
+        if (block.isFromReference)
+          Semantics(
+            label: block.fromSourceTitle == null
+                ? 'From a place you saved'
+                : 'From your link: ${block.fromSourceTitle}',
+            child: const Icon(
+              Icons.link,
+              size: 14,
+              color: WayfareColors.accent,
+            ),
+          ),
       ],
     );
   }
@@ -555,7 +582,7 @@ class ActivityCard extends StatelessWidget {
         if (block.estimatedDurationMinutes != null &&
             block.estimatedDurationMinutes! > 0)
           formatDuration(block.estimatedDurationMinutes!),
-        if (block.location.trim().isNotEmpty) block.location.trim(),
+        if (_venue.isNotEmpty) _venue,
       ];
       // Both blank is a legitimate one-line activity, so the row goes entirely
       // rather than leaving a gap where a fact should be.

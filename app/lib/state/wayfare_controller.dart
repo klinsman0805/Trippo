@@ -199,7 +199,15 @@ class WayfareController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Which way the last day change moved: +1 later, −1 earlier, 0 for a jump
+  /// that is neither (a reload, or a clamp after the trip got shorter).
+  ///
+  /// The Trip tab slides its content in from the side you came from, which
+  /// only reads as movement through the trip if it knows the direction.
+  int dayDirection = 0;
+
   void selectDay(int day) {
+    dayDirection = day == selectedDay ? 0 : (day > selectedDay ? 1 : -1);
     selectedDay = day;
     notifyListeners();
   }

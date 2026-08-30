@@ -56,6 +56,7 @@ PlanBlock block({
   String? startTime,
   num? duration,
   String location = '',
+  String description = '',
   num? cost,
   String? fromPlaceId,
   String? fromSourceTitle,
@@ -64,7 +65,7 @@ PlanBlock block({
       id: id,
       timeOfDay: slot,
       activity: activity,
-      description: '',
+      description: description,
       location: location,
       estimatedDurationMinutes: duration,
       suitedForMembers: const [],
@@ -283,6 +284,66 @@ void main() {
     });
   });
 
+  group('The card keeps to what the day needs', () {
+    testWidgets('drops a description that only restates the title',
+        (tester) async {
+      await pump(
+        tester,
+        Column(
+          children: [
+            ActivityCard(
+              block: block(
+                activity: 'Pavilion Bukit Bintang',
+                description: 'Recommended shopping mall.',
+              ),
+              members: const [],
+              currency: 'MYR',
+            ),
+            ActivityCard(
+              block: block(
+                id: 'blk_2',
+                activity: 'Wat Pho',
+                description: 'Opens at 08:00 and the last entry is 18:30.',
+              ),
+              members: const [],
+              currency: 'MYR',
+            ),
+          ],
+        ),
+      );
+
+      // The extractor writes a generic line for most places, and a sentence
+      // that adds nothing costs a row on every card in the day.
+      expect(find.text('Recommended shopping mall.'), findsNothing);
+      // One that says something is kept.
+      expect(
+        find.text('Opens at 08:00 and the last entry is 18:30.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('does not print the venue when it is the title again',
+        (tester) async {
+      await pump(
+        tester,
+        ActivityCard(
+          // A cited place with no street address stores its own name as the
+          // venue, so the footer repeated the heading word for word.
+          block: block(
+            activity: 'Bintang Fairlane Residences',
+            location: 'Bintang Fairlane Residences',
+            duration: 90,
+          ),
+          members: const [],
+          currency: 'MYR',
+        ),
+      );
+
+      expect(find.text('Bintang Fairlane Residences'), findsOneWidget);
+      expect(find.text('1h 30m'), findsOneWidget);
+    });
+  });
+
   group('An unpriced activity', () {
     test('is not the same as a free one', () {
       // The planner is told null is a better answer than an invented number,
@@ -295,7 +356,8 @@ void main() {
   });
 
   group('Where an activity came from', () {
-    testWidgets('a card names the link it traces back to', (tester) async {
+    testWidgets('a card is marked, and names its link to a screen reader',
+        (tester) async {
       await pump(
         tester,
         ActivityCard(
@@ -309,9 +371,16 @@ void main() {
         ),
       );
 
-      // The clearest evidence that importing a link did anything: the plan
-      // points back at the post it came from.
-      expect(find.text('From your link · 吉隆坡3天2夜旅游攻略'), findsOneWidget);
+      // The named source took a whole line on every card, which made a day
+      // of saved places unreadable. The mark keeps the fact; the name is
+      // still there for anyone who cannot see the icon.
+      expect(find.byIcon(Icons.link), findsOneWidget);
+      expect(
+        tester.semantics
+            .find(find.byIcon(Icons.link))
+            .label,
+        'From your link: 吉隆坡3天2夜旅游攻略',
+      );
     });
 
     testWidgets('a saved place with no source still says it was yours',
@@ -326,11 +395,13 @@ void main() {
       );
 
       // Added by hand to the trip's places rather than pulled out of a link.
-      expect(find.text('From a place you saved'), findsOneWidget);
+      expect(
+        tester.semantics.find(find.byIcon(Icons.link)).label,
+        'From a place you saved',
+      );
     });
 
-    testWidgets('an activity the planner chose claims nothing',
-        (tester) async {
+    testWidgets('an activity the planner chose is not marked', (tester) async {
       await pump(
         tester,
         ActivityCard(
@@ -342,7 +413,7 @@ void main() {
 
       // Attribution is only shown where the server actually recorded one —
       // a citation the user can see has to be a fact.
-      expect(find.textContaining('From '), findsNothing);
+      expect(find.byIcon(Icons.link), findsNothing);
     });
   });
 

@@ -185,6 +185,8 @@ plan_models.TimeOfDay slotForTime(String hhmm) {
 /// is a destination rather than a "sight".
 String categoryLabel(String category) => switch (category.toLowerCase()) {
       'lodging' => 'accommodation',
+      'activities' => 'activities',
+      'buffer' => 'buffer',
       'sight' => 'destination',
       'nightlife' => 'night out',
       'transport' => 'getting around',

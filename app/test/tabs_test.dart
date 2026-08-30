@@ -208,7 +208,7 @@ void _shortDayLabels() {
 void main() {
   _shortDayLabels();
   group('Trip tab', () {
-    testWidgets('renders day chips, costs and the optional badge',
+    testWidgets('renders day chips, the day total and the optional badge',
         (tester) async {
       final controller = buildController(
         members: const [_maya, _diego, _ruth],
@@ -223,9 +223,11 @@ void main() {
 
       expect(find.text('Day 1'), findsOneWidget);
       expect(find.text('Lisbon · Alfama'), findsOneWidget);
-      // Day cost is the sum of both blocks, per person.
+      // Day cost is the sum of both blocks, per person. It is stated once,
+      // for the day — a figure on every card turned the list into a receipt,
+      // and the Budget tab is where the money is actually read.
       expect(find.text('€34 pp planned'), findsOneWidget);
-      expect(find.text('€12 pp'), findsOneWidget);
+      expect(find.text('€12 pp'), findsNothing);
       expect(find.text('OPTIONAL'), findsOneWidget);
       expect(find.text('Hide optional activities'), findsOneWidget);
     });
