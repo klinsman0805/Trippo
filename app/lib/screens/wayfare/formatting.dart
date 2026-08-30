@@ -125,12 +125,22 @@ Color timeOfDayColor(plan_models.TimeOfDay time) => switch (time) {
     };
 
 /// `Lisbon → Sintra → Porto · 12 Sept–16 Sept`
+///
+/// [omit] drops the route when it says exactly what the heading above already
+/// says — a trip named after its one destination would otherwise print it
+/// twice, once as the title and once underneath.
 String destinationsSubtitle(
   List<String> destinations,
   String? start,
-  String? end,
-) {
+  String? end, {
+  String? omit,
+}) {
   final route = destinations.join(' → ');
+  if (omit != null && route.toLowerCase() == omit.trim().toLowerCase()) {
+    return [formatShortDate(start), formatShortDate(end)]
+        .where((d) => d.isNotEmpty)
+        .join('–');
+  }
   final dates = [formatShortDate(start), formatShortDate(end)]
       .where((d) => d.isNotEmpty)
       .join('–');

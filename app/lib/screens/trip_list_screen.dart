@@ -308,6 +308,9 @@ class _TripTile extends StatelessWidget {
       trip.destinations,
       trip.startDate,
       trip.endDate,
+      // The tile already leads with the trip's name, which for most trips is
+      // its one destination.
+      omit: trip.title,
     );
 
     return Material(

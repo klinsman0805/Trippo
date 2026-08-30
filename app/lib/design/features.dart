@@ -15,4 +15,14 @@ class WayfareFeatures {
   /// Off while the app is an individual's tool. Costs still read "pp", because
   /// that is what a price per person is, with or without a group.
   static const bool groups = false;
+
+  /// Shopping for flights inside the app: the comparison screen, its fare
+  /// cards and the "what does this one cost you in trip time" consequence
+  /// sheet.
+  ///
+  /// Off because it cannot yet do the job — the fare provider is mock, so the
+  /// prices are invented, and nobody books a flight from here anyway. Entering
+  /// a flight you have already booked is a different feature and stays on: it
+  /// reads a real schedule and is how the trip gets its dates.
+  static const bool flightSearch = false;
 }

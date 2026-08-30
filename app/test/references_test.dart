@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:http/http.dart' as http;
 import 'package:trippo/api/api_client.dart';
 import 'package:trippo/api/trippo_api.dart';
+import 'package:trippo/design/features.dart';
 import 'package:trippo/design/theme.dart';
 import 'package:trippo/design/widgets.dart';
 import 'package:trippo/screens/trip_list_screen.dart';
@@ -479,6 +480,73 @@ void main() {
       );
       expect(find.textContaining('Still going'), findsOneWidget);
       expect(find.text('5m 00s'), findsOneWidget);
+    });
+  });
+
+  group('Before the trip has dates', () {
+    testWidgets('splits the two ways in, and hides flight shopping',
+        (tester) async {
+      await wrap(
+        tester,
+        Scaffold(
+          body: SingleChildScrollView(
+            child: NoDatesYet(
+              onEnterBookedFlight: () {},
+              onOpenFlights: () {},
+              onSetDatesByHand: () {},
+              onGoToGroup: () {},
+              memberCount: 0,
+            ),
+          ),
+        ),
+      );
+
+      // One instruction, not an explanation of our internals followed by a
+      // question the reader cannot answer yet.
+      expect(find.text('Set your dates'), findsOneWidget);
+      expect(
+        find.textContaining('The planner builds around your dates'),
+        findsNothing,
+      );
+
+      // Two ways in, each under its own heading.
+      expect(find.text('IF YOU ARE FLYING'), findsOneWidget);
+      expect(find.text('IF YOU ARE NOT'), findsOneWidget);
+      expect(find.text('Enter flight number'), findsOneWidget);
+      expect(find.text('Set dates myself'), findsOneWidget);
+
+      // Fare shopping is behind a flag: the provider is mock, so the prices
+      // are invented and nothing can be booked from here.
+      expect(
+        find.text('Search flights'),
+        WayfareFeatures.flightSearch ? findsOneWidget : findsNothing,
+      );
+
+      // Importing belongs after the dates, where the places have days to go
+      // on. This screen is one decision.
+      expect(find.text('Import a link'), findsNothing);
+    });
+
+    test('a subtitle that repeats the title is dropped', () {
+      // "Bangkok" under a heading reading Bangkok said nothing twice.
+      expect(
+        destinationsSubtitle(['Bangkok'], null, null, omit: 'Bangkok'),
+        '',
+      );
+      expect(
+        destinationsSubtitle(
+          ['Bangkok'],
+          '2026-09-26',
+          '2026-09-29',
+          omit: 'Bangkok',
+        ),
+        '26 Sept–29 Sept',
+      );
+      // A trip named something else keeps its route.
+      expect(
+        destinationsSubtitle(['Lisbon', 'Porto'], null, null, omit: 'Portugal'),
+        'Lisbon → Porto',
+      );
     });
   });
 }

@@ -57,8 +57,9 @@ class _WayfareShellState extends State<WayfareShell> {
   void initState() {
     super.initState();
     _controller.addListener(_onChanged);
-    // The short-day band links back to the decision that caused it.
-    _controller.onSeeOtherFlights = _openFlights;
+    // The short-day band links back to the decision that caused it — when
+    // there is a search to send them to.
+    if (WayfareFeatures.flightSearch) _controller.onSeeOtherFlights = _openFlights;
     _controller.load();
   }
 
@@ -193,14 +194,10 @@ class _WayfareShellState extends State<WayfareShell> {
     if (_controller.tab == WayfareTab.itinerary &&
         !_controller.hasPlan &&
         (_controller.trip?.startDate == null)) {
-      return _NoDatesYet(
+      return NoDatesYet(
         onEnterBookedFlight: _openBookedFlight,
         onOpenFlights: _openFlights,
         onSetDatesByHand: _pickDatesByHand,
-        onImportLink: _openImport,
-        onSeeReferences: _openSources,
-        importedPlaces: _controller.importedPlaces,
-        sourceCount: _controller.sourceCount,
         onGoToGroup: () => _controller.goTo(WayfareTab.group),
         memberCount: _controller.members.length,
       );
@@ -758,15 +755,17 @@ class _WayfareShellState extends State<WayfareShell> {
                 _openBookedFlight();
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.flight_takeoff, color: WayfareColors.ink),
-              title: const Text('Search flights'),
-              subtitle: const Text('Picking flights sets the trip dates'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _openFlights();
-              },
-            ),
+            if (WayfareFeatures.flightSearch)
+              ListTile(
+                leading:
+                    const Icon(Icons.flight_takeoff, color: WayfareColors.ink),
+                title: const Text('Search flights'),
+                subtitle: const Text('Picking flights sets the trip dates'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _openFlights();
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.event_outlined, color: WayfareColors.ink),
               title: const Text('Set dates myself'),
@@ -938,10 +937,13 @@ class _WayfareShellState extends State<WayfareShell> {
     }
 
     return switch (_controller.tab) {
+      // The title is already the trip's name, which for most trips is the
+      // destination — so "Bangkok" under "Bangkok" said nothing twice.
       WayfareTab.itinerary => destinationsSubtitle(
           trip?.destinations ?? const [],
           trip?.startDate,
           trip?.endDate,
+          omit: _title(),
         ),
       WayfareTab.budget => plan == null
           ? 'Nothing committed yet'
@@ -1139,26 +1141,19 @@ class _GeneratingOverlayState extends State<GeneratingOverlay>
 /// by how much the app would like them to do. Someone holding a booking has
 /// the answer already and should not be sent shopping; someone taking a train
 /// should not have to pretend to look at flights to get past this screen.
-class _NoDatesYet extends StatelessWidget {
-  const _NoDatesYet({
+class NoDatesYet extends StatelessWidget {
+  const NoDatesYet({
+    super.key,
     required this.onEnterBookedFlight,
     required this.onOpenFlights,
     required this.onSetDatesByHand,
     required this.onGoToGroup,
     required this.memberCount,
-    required this.onImportLink,
-    required this.onSeeReferences,
-    required this.importedPlaces,
-    required this.sourceCount,
   });
 
   final VoidCallback onEnterBookedFlight;
   final VoidCallback onOpenFlights;
   final VoidCallback onSetDatesByHand;
-  final VoidCallback onImportLink;
-  final VoidCallback onSeeReferences;
-  final List<Place> importedPlaces;
-  final int sourceCount;
   final VoidCallback onGoToGroup;
   final int memberCount;
 
@@ -1169,63 +1164,53 @@ class _NoDatesYet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ImportedPlacesCard(
-            places: importedPlaces,
-            sourceCount: sourceCount,
-            onSeeAll: onSeeReferences,
-            onImportMore: onImportLink,
-            awaitingDates: true,
-          ),
+          // One instruction, not a rhetorical question. The screen used to
+          // open with "The planner builds around your dates. Where do yours
+          // come from?" — an explanation of our internals, followed by a
+          // question the reader is not equipped to answer yet.
+          Text('Set your dates', style: WayfareType.display(24)),
+          const SizedBox(height: 6),
           Text(
-            'The planner builds around your dates. Where do yours come from?',
+            'Nothing can be planned until the trip has days. It takes one '
+            'step, and there are two ways to do it.',
             style: WayfareType.body(14, color: WayfareColors.subhead),
           ),
           const SizedBox(height: WayfareSpace.sectionGap),
+          const _SectionLabel('If you are flying'),
+          const SizedBox(height: 10),
           _StartOption(
             icon: Icons.confirmation_number_outlined,
             title: 'I have my flight booked',
-            body: 'Enter your flight number and we will fill in the dates from '
-                'the schedule — including how much of the first and last day '
-                'you actually get.',
+            body: 'Enter your flight number. We read the real schedule and '
+                'fill in the dates — including how much of the first and last '
+                'day the flights actually leave you.',
             cta: 'Enter flight number',
             emphasis: true,
             onTap: onEnterBookedFlight,
           ),
-          const SizedBox(height: WayfareSpace.cardGap),
+          if (WayfareFeatures.flightSearch) ...[
+            const SizedBox(height: WayfareSpace.cardGap),
+            _StartOption(
+              icon: Icons.flight_takeoff,
+              title: "Haven't booked yet?",
+              body: 'Compare flights here and see what each one costs you in '
+                  'trip time before you commit to it.',
+              cta: 'Search flights',
+              onTap: onOpenFlights,
+            ),
+          ],
+          const SizedBox(height: WayfareSpace.sectionGap),
+          const _SectionLabel('If you are not'),
+          const SizedBox(height: 10),
           _StartOption(
-            icon: Icons.flight_takeoff,
-            title: "Haven't booked yet?",
-            body: 'Compare flights here and see what each one costs you in '
-                'trip time before you commit to it.',
-            cta: 'Search flights',
-            onTap: onOpenFlights,
-          ),
-          const SizedBox(height: WayfareSpace.cardGap),
-          const SizedBox(height: WayfareSpace.cardGap),
-          _StartOption(
-            icon: Icons.directions_railway_outlined,
-            title: 'Not flying?',
-            body: 'Driving, training, already there — pick your dates and start '
-                'planning. Flights are one way to set them, not the only one.',
+            icon: Icons.event_outlined,
+            title: 'Pick the dates yourself',
+            body: 'Driving, training, already there, or the flight is not '
+                'booked yet — choose the days and the planning starts from '
+                'there.',
             cta: 'Set dates myself',
             onTap: onSetDatesByHand,
           ),
-          // Dates and references are independent: the planner can hold a pile
-          // of places long before it knows which days to spread them across,
-          // and collecting them is what people are doing anyway. Once
-          // something is saved, the card above says so and this would be
-          // asking twice.
-          if (importedPlaces.isEmpty) ...[
-            const SizedBox(height: WayfareSpace.sectionGap),
-            _StartOption(
-              icon: Icons.link,
-              title: 'Already saving places?',
-              body: 'Paste a 小红书 post, a list or a blog now. We read it and '
-                  'keep the places, ready for whenever the dates land.',
-              cta: 'Import a link',
-              onTap: onImportLink,
-            ),
-          ],
           if (WayfareFeatures.groups && memberCount == 0) ...[
             const SizedBox(height: WayfareSpace.sectionGap),
             Text(
@@ -1244,6 +1229,17 @@ class _NoDatesYet extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A quiet heading over a group of options.
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) =>
+      WayfareEyebrow(text, color: WayfareColors.muted, size: 11.5);
 }
 
 /// What the imports actually produced, named back.
