@@ -15,8 +15,6 @@ import 'budget_tab.dart';
 import 'currency_picker.dart';
 import 'flights/booked_flight_screen.dart';
 import 'flights/flights_screen.dart';
-import '../../design/fonts.dart';
-import 'font_preview_sheet.dart';
 import 'formatting.dart';
 import 'group_tab.dart';
 import 'itinerary/activity_sheet.dart';
@@ -789,17 +787,6 @@ class _WayfareShellState extends State<WayfareShell> {
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 _setDestination();
-              },
-            ),
-            // Temporary, while the card font is being chosen.
-            ListTile(
-              leading:
-                  const Icon(Icons.text_fields, color: WayfareColors.ink),
-              title: const Text('Card font'),
-              subtitle: Text(WayfareFonts.family.value ?? 'System'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _sheet2(const FontPreviewSheet());
               },
             ),
             ListTile(

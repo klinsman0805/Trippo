@@ -71,8 +71,8 @@ class WayfareTheme extends InheritedWidget {
 
 /// Type scale.
 ///
-/// Display is Instrument Serif; UI is the platform sans. Sizes are the literal
-/// set from the handoff — 10.5 through 40.
+/// Display is Instrument Serif; everything else is Libre Franklin. Sizes are
+/// the literal set from the handoff — 10.5 through 40.
 abstract final class WayfareType {
   /// Instrument Serif, used for the trip title, budget headline, sheet title
   /// and the generating overlay.
@@ -126,18 +126,14 @@ abstract final class WayfareType {
 /// The MaterialApp theme. Mostly a carrier for the background and font family —
 /// the design is specific enough that most surfaces are built explicitly rather
 /// than inherited from Material defaults.
-ThemeData buildAppTheme(WayfarePlatform platform, {String? fontFamily}) {
+ThemeData buildAppTheme(WayfarePlatform platform) {
   final base = ThemeData(useMaterial3: true);
   // The family belongs on the theme, not only on WayfareType: most styles in
   // the app are plain TextStyles with no family, and a Text merges those onto
   // the inherited DefaultTextStyle — so setting it here reaches every one of
   // them, including the card titles.
-  final textTheme = fontFamily != null
-      ? GoogleFonts.getTextTheme(fontFamily, base.textTheme)
-      // Roboto on Android, San Francisco (via the system default) on iOS.
-      : platform == WayfarePlatform.android
-          ? GoogleFonts.robotoTextTheme(base.textTheme)
-          : base.textTheme;
+  final textTheme =
+      GoogleFonts.getTextTheme(WayfareFonts.family, base.textTheme);
 
   return base.copyWith(
     scaffoldBackgroundColor: WayfareColors.bgApp,
