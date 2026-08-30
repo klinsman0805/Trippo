@@ -16,6 +16,19 @@ class WayfareFonts {
 
   static const family = 'Work Sans';
 
+  /// The display face: trip titles, the budget headline, sheet headings.
+  ///
+  /// Was Instrument Serif, which ships one weight — 400 — and no bold. That
+  /// is why it read thin: there was nothing heavier to reach for. DM Serif
+  /// Display is the same kind of face, a transitional serif drawn for large
+  /// sizes, but with far more weight in the stems at the same point size.
+  static const displayFamily = 'DM Serif Display';
+
+  /// DM Serif Display also ships a single weight, so this is 400 — which on
+  /// this face is already heavier than Instrument Serif's bold would have
+  /// been. Kept named so a variable face can be swapped in without hunting.
+  static const displayWeight = FontWeight.w400;
+
   /// The family applied to a style, for the places that build one directly.
   ///
   /// Most text in the app inherits it from the theme instead — a `Text` merges

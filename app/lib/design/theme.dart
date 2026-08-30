@@ -71,15 +71,16 @@ class WayfareTheme extends InheritedWidget {
 
 /// Type scale.
 ///
-/// Display is Instrument Serif; everything else is Libre Franklin. Sizes are
-/// the literal set from the handoff — 10.5 through 40.
+/// Two faces, both named in [WayfareFonts]. Sizes are the literal set from the
+/// handoff — 10.5 through 40.
 abstract final class WayfareType {
-  /// Instrument Serif, used for the trip title, budget headline, sheet title
-  /// and the generating overlay.
+  /// The display serif: trip titles, the budget headline, sheet headings and
+  /// the generating overlay.
   static TextStyle display(double size, {Color? color, double height = 1.15}) =>
-      GoogleFonts.instrumentSerif(
+      GoogleFonts.getFont(
+        WayfareFonts.displayFamily,
         fontSize: size,
-        fontWeight: FontWeight.w400,
+        fontWeight: WayfareFonts.displayWeight,
         color: color ?? WayfareColors.ink,
         height: height,
       );
