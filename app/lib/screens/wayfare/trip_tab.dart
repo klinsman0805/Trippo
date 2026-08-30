@@ -313,7 +313,7 @@ class _DayChip extends StatelessWidget {
                   label,
                   style: TextStyle(
                     fontSize: 13.5,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w700,
                     height: 1.25,
                     color: selected
                         ? WayfareColors.surface
@@ -324,6 +324,7 @@ class _DayChip extends StatelessWidget {
                   sub,
                   style: TextStyle(
                     fontSize: 11,
+                    fontWeight: FontWeight.w500,
                     height: 1.25,
                     color: (selected
                             ? WayfareColors.surface

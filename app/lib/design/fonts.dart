@@ -14,7 +14,7 @@ import 'package:google_fonts/google_fonts.dart';
 class WayfareFonts {
   const WayfareFonts._();
 
-  static const family = 'Work Sans';
+  static const family = 'Crimson Text';
 
   /// The display face: trip titles, the budget headline, sheet headings.
   ///
@@ -23,12 +23,12 @@ class WayfareFonts {
   /// variable across 100–900, so the weight is a decision rather than whatever
   /// the file happens to contain, and its softened, slightly wonky letterforms
   /// have the warmth this palette is built around.
-  static const displayFamily = 'Fraunces';
+  static const displayFamily = 'Julius Sans One';
 
   /// Semibold. Heavy enough to hold a trip title against the cream background
   /// without the headings turning into a slab — one line to change if it wants
   /// more (700) or less (500).
-  static const displayWeight = FontWeight.w600;
+  static const displayWeight = FontWeight.w800;
 
   /// The family applied to a style, for the places that build one directly.
   ///
