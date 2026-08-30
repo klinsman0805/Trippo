@@ -283,10 +283,19 @@ class WayfareNavBar extends StatelessWidget {
     super.key,
     required this.current,
     required this.onSelect,
+    this.disabled = const {},
   });
 
   final WayfareTab current;
   final ValueChanged<WayfareTab> onSelect;
+
+  /// Tabs that are shown but not yet usable.
+  ///
+  /// Dimmed rather than hidden: Refine exists and will work, and a tab that
+  /// vanishes and reappears is harder to trust than one that says why it is
+  /// waiting. Tapping still calls [onSelect], which is where the explanation
+  /// is given.
+  final Set<WayfareTab> disabled;
 
   static const _all = <(WayfareTab, String, IconData)>[
     (WayfareTab.itinerary, 'Trip', Icons.map_outlined),
@@ -328,6 +337,7 @@ class WayfareNavBar extends StatelessWidget {
                     label: label,
                     icon: icon,
                     active: tab == current,
+                    dimmed: disabled.contains(tab),
                     activeColor: WayfareColors.accent,
                     onTap: () => onSelect(tab),
                     iconSize: 20,
@@ -360,6 +370,7 @@ class WayfareNavBar extends StatelessWidget {
                 label: label,
                 icon: icon,
                 active: tab == current,
+                dimmed: disabled.contains(tab),
                 activeColor: WayfareColors.androidActiveInk,
                 onTap: () => onSelect(tab),
                 iconSize: 18,
@@ -387,6 +398,7 @@ class _NavItem extends StatelessWidget {
     required this.fontWeight,
     required this.minHeight,
     this.pillIndicator = false,
+    this.dimmed = false,
   });
 
   final String label;
@@ -400,6 +412,9 @@ class _NavItem extends StatelessWidget {
   final double minHeight;
   final bool pillIndicator;
 
+  /// Shown, but not usable yet.
+  final bool dimmed;
+
   @override
   Widget build(BuildContext context) {
     final color = active ? activeColor : WayfareColors.faint;
@@ -409,7 +424,10 @@ class _NavItem extends StatelessWidget {
     return Semantics(
       selected: active,
       button: true,
-      child: InkWell(
+      enabled: !dimmed,
+      child: Opacity(
+        opacity: dimmed ? 0.4 : 1,
+        child: InkWell(
         onTap: onTap,
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: minHeight),
@@ -443,6 +461,7 @@ class _NavItem extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

@@ -141,7 +141,11 @@ class _WayfareShellState extends State<WayfareShell> {
           RefineComposer(controller: _controller),
         WayfareNavBar(
           current: _controller.tab,
-          onSelect: _controller.goTo,
+          onSelect: _selectTab,
+          // Refining is a conversation about an itinerary. Without one there
+          // is nothing to refine, and the tab would open on an empty thread
+          // that answers questions about a trip it cannot see.
+          disabled: _controller.hasPlan ? const {} : const {WayfareTab.chat},
         ),
       ],
     );
@@ -151,12 +155,38 @@ class _WayfareShellState extends State<WayfareShell> {
   ///
   /// Only the planned Trip tab does, and only once it has an itinerary to
   /// page through — every state before that is an ordinary column.
+  /// The trip has days to plan into.
+  bool get _hasDates => _controller.trip?.startDate != null;
+
   bool get _bodyScrollsItself =>
       _controller.tab == WayfareTab.itinerary &&
       _controller.hasPlan &&
       !_controller.isFailed &&
       !_controller.needsInfo &&
       _controller.error == null;
+
+  void _selectTab(WayfareTab tab) {
+    if (tab == WayfareTab.chat && !_controller.hasPlan) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: WayfareColors.ink,
+            content: Text(
+              _controller.trip?.startDate == null
+                  ? 'Set your dates first, then plan an itinerary — refining '
+                      'needs something to change.'
+                  : 'Plan an itinerary first — refining needs something to '
+                      'change.',
+              style: const TextStyle(color: WayfareColors.generatingInk),
+            ),
+          ),
+        );
+      return;
+    }
+    _controller.goTo(tab);
+  }
 
   Widget _body() {
     if (_controller.error != null && _controller.plan == null) {
@@ -736,45 +766,54 @@ class _WayfareShellState extends State<WayfareShell> {
                 _setCurrency();
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.link, color: WayfareColors.ink),
-              title: const Text('Your references'),
-              subtitle: const Text('Links you have imported, and what came out'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _openSources();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.confirmation_number_outlined,
-                  color: WayfareColors.ink),
-              title: const Text('I have my flight booked'),
-              subtitle: const Text('Set the dates from a flight number'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _openBookedFlight();
-              },
-            ),
-            if (WayfareFeatures.flightSearch)
+            // Everything below arrives with the dates. Before them the trip
+            // has no days to hang anything on, and the screen behind this
+            // sheet is already asking for exactly one thing — a menu offering
+            // five more is five ways to not do it.
+            if (_hasDates)
               ListTile(
-                leading:
-                    const Icon(Icons.flight_takeoff, color: WayfareColors.ink),
-                title: const Text('Search flights'),
-                subtitle: const Text('Picking flights sets the trip dates'),
+                leading: const Icon(Icons.link, color: WayfareColors.ink),
+                title: const Text('Your references'),
+                subtitle:
+                    const Text('Links you have imported, and what came out'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
-                  _openFlights();
+                  _openSources();
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.event_outlined, color: WayfareColors.ink),
-              title: const Text('Set dates myself'),
-              subtitle: const Text('For trips that do not involve a flight'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _pickDatesByHand();
-              },
-            ),
+            if (_controller.hasPlan)
+              ListTile(
+                leading: const Icon(Icons.confirmation_number_outlined,
+                    color: WayfareColors.ink),
+                title: const Text('I have my flight booked'),
+                subtitle: const Text('Set the dates from a flight number'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _openBookedFlight();
+                },
+              ),
+              if (WayfareFeatures.flightSearch)
+                ListTile(
+                  leading:
+                      const Icon(Icons.flight_takeoff, color: WayfareColors.ink),
+                  title: const Text('Search flights'),
+                  subtitle: const Text('Picking flights sets the trip dates'),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _openFlights();
+                  },
+                ),
+            if (_controller.hasPlan)
+              ListTile(
+                leading:
+                    const Icon(Icons.event_outlined, color: WayfareColors.ink),
+                title: const Text('Set dates myself'),
+                subtitle: const Text('For trips that do not involve a flight'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickDatesByHand();
+                },
+              ),
             // Editing lives here too, so a day can be changed from anywhere
             // rather than only from the button at the end of it.
             if (_controller.hasPlan)
@@ -807,7 +846,10 @@ class _WayfareShellState extends State<WayfareShell> {
               ),
             // This is where regenerating lives now that the header icon no
             // longer implies it. Labelled, so it cannot be hit by accident.
-            if (_controller.canGenerate)
+            // Only once there is a plan: before that the itinerary screen's
+            // own two cards are the way in, and the menu would be a second
+            // copy of the screen's primary action.
+            if (_controller.canGenerate && _controller.hasPlan)
               ListTile(
                 leading: const Icon(Icons.auto_awesome, color: WayfareColors.ink),
                 title: Text(
@@ -823,14 +865,18 @@ class _WayfareShellState extends State<WayfareShell> {
                   _openRegenerate();
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.chat_bubble_outline, color: WayfareColors.ink),
-              title: const Text('Ask for a change'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _controller.goTo(WayfareTab.chat);
-              },
-            ),
+            // Same rule as the Refine tab: there has to be something to
+            // change before changing it is offered.
+            if (_controller.hasPlan)
+              ListTile(
+                leading: const Icon(Icons.chat_bubble_outline,
+                    color: WayfareColors.ink),
+                title: const Text('Ask for a change'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _controller.goTo(WayfareTab.chat);
+                },
+              ),
               const SizedBox(height: 12),
             ],
           ),

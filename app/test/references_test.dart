@@ -6,12 +6,15 @@ import 'package:http/testing.dart';
 import 'package:http/http.dart' as http;
 import 'package:trippo/api/api_client.dart';
 import 'package:trippo/api/trippo_api.dart';
+import 'dart:ui' show Tristate;
+
 import 'package:trippo/design/features.dart';
 import 'package:trippo/design/theme.dart';
 import 'package:trippo/design/widgets.dart';
 import 'package:trippo/screens/trip_list_screen.dart';
 import 'package:trippo/models/trip.dart';
 import 'package:trippo/screens/wayfare/formatting.dart';
+import 'package:trippo/screens/wayfare/shell_chrome.dart';
 import 'package:trippo/screens/wayfare/sources/import_sheet.dart';
 import 'package:trippo/screens/wayfare/wayfare_shell.dart';
 import 'package:trippo/screens/wayfare/sources/sources_screen.dart';
@@ -546,6 +549,61 @@ void main() {
       expect(
         destinationsSubtitle(['Lisbon', 'Porto'], null, null, omit: 'Portugal'),
         'Lisbon → Porto',
+      );
+    });
+  });
+
+  group('Refining needs something to refine', () {
+    testWidgets('the tab is dimmed and explains itself when tapped',
+        (tester) async {
+      WayfareTab? went;
+
+      await wrap(
+        tester,
+        Scaffold(
+          body: Builder(
+            builder: (context) => Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                WayfareNavBar(
+                  current: WayfareTab.itinerary,
+                  disabled: const {WayfareTab.chat},
+                  onSelect: (tab) {
+                    if (tab == WayfareTab.chat) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Plan an itinerary first — refining needs '
+                            'something to change.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                    went = tab;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // Dimmed rather than hidden: the tab exists and will work, and one that
+      // vanishes and reappears is harder to trust than one that says why it
+      // is waiting.
+      expect(
+        tester.semantics.find(find.text('Refine')).flagsCollection.isEnabled,
+        Tristate.isFalse,
+      );
+
+      await tester.tap(find.text('Refine'));
+      await tester.pump();
+
+      expect(went, isNull);
+      expect(
+        find.textContaining('refining needs something to change'),
+        findsOneWidget,
       );
     });
   });
