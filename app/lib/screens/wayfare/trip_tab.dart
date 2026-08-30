@@ -11,8 +11,15 @@ import '../../state/wayfare_controller.dart';
 import 'formatting.dart';
 import 'itinerary/day_editing.dart';
 
-/// Trip tab: one day at a time behind a horizontal day-chip scroller.
-class TripTab extends StatelessWidget {
+/// Trip tab: one day at a time, paginated.
+///
+/// The days are pages rather than a cross-fade. A switcher draws both days at
+/// once through the middle of the transition, and no amount of curve tuning
+/// hides that — two overlapping itineraries is a rendering artefact, not a
+/// movement. Pages never overlap: one slides out as the next slides in, they
+/// stay opaque throughout, and the gesture that does it is the one people
+/// already try, which is swiping sideways.
+class TripTab extends StatefulWidget {
   const TripTab({
     super.key,
     required this.controller,
@@ -29,8 +36,62 @@ class TripTab extends StatelessWidget {
   final ValueChanged<PlanBlock> onRemoveActivity;
 
   @override
+  State<TripTab> createState() => _TripTabState();
+}
+
+class _TripTabState extends State<TripTab> {
+  late final PageController _pages = PageController(
+    initialPage: _indexOfSelected,
+  );
+
+  WayfareController get controller => widget.controller;
+  void Function(TimeOfDay) get onAddActivity => widget.onAddActivity;
+  ValueChanged<PlanBlock> get onEditActivity => widget.onEditActivity;
+  ValueChanged<PlanBlock> get onRemoveActivity => widget.onRemoveActivity;
+
+  int get _indexOfSelected {
+    final days = controller.plan?.itinerary ?? const [];
+    final i = days.indexWhere((d) => d.day == controller.selectedDay);
+    return i < 0 ? 0 : i;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // The tab follows the controller itself rather than relying on an
+    // ancestor to rebuild it. A day chosen elsewhere — the header menu, a
+    // refinement jumping to the day it changed — has to move the pager, and
+    // that cannot depend on who happens to be listening above.
+    controller.addListener(_onControllerChanged);
+  }
+
+  void _onControllerChanged() {
+    if (!mounted) return;
+    setState(_syncToSelected);
+  }
+
+  @override
+  void dispose() {
+    controller.removeListener(_onControllerChanged);
+    _pages.dispose();
+    super.dispose();
+  }
+
+  /// Follows a day chosen somewhere else — a chip, the header menu, a
+  /// refinement jumping to the day it changed.
+  void _syncToSelected() {
+    if (!_pages.hasClients) return;
+    final target = _indexOfSelected;
+    if (_pages.page?.round() == target) return;
+    _pages.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final theme = WayfareTheme.of(context);
     final plan = controller.plan!;
     final day = controller.currentDay;
     if (day == null) return const SizedBox.shrink();
@@ -41,48 +102,28 @@ class TripTab extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _dayChips(context, plan),
-        // The day's content enters from the side you came from, so moving
-        // through the trip reads as movement rather than as a redraw.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-          child: AnimatedSize(
-            // Days differ in height, and without this the page below them
-            // jumps the instant the new day is laid out.
-            duration: const Duration(milliseconds: 280),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 280),
-            switchInCurve: Curves.easeOutCubic,
-            // The outgoing day leaves in the first third. Fading both across
-            // the full duration muddies the middle, where two days are drawn
-            // on top of each other at half opacity.
-            switchOutCurve: const Interval(0, 0.35, curve: Curves.easeIn),
-            // Top-aligned: the default centres the two children on each other,
-            // so a short day and a long one slide vertically past each other
-            // as well as sideways.
-            layoutBuilder: (current, previous) => Stack(
-              alignment: Alignment.topLeft,
-              children: [...previous, ?current],
-            ),
-            transitionBuilder: (child, animation) {
-              final incoming = child.key == ValueKey(controller.selectedDay);
-              final from = controller.dayDirection == 0
-                  ? 0.0
-                  : controller.dayDirection * (incoming ? 0.06 : -0.06);
-              return FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween(
-                    begin: Offset(from, 0),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                ),
-              );
-            },
-            child: Column(
-              key: ValueKey(controller.selectedDay),
+        Expanded(
+          child: PageView.builder(
+            controller: _pages,
+            itemCount: plan.itinerary.length,
+            // Which day is on screen is the page's to say; the chips above
+            // follow it rather than the other way round.
+            onPageChanged: (i) =>
+                controller.selectDay(plan.itinerary[i].day.toInt()),
+            itemBuilder: (context, i) => _dayPage(context, plan.itinerary[i], currency),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One day, scrolling on its own so the pager above it stays a fixed height.
+  Widget _dayPage(BuildContext context, PlanDay day, String currency) {
+    final theme = WayfareTheme.of(context);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+      child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (controller.updatedDay == day.day) _updatedNotice(theme),
@@ -108,9 +149,9 @@ class TripTab extends StatelessWidget {
                         : null,
                   )
                 else
-                  ..._slotGroups(currency),
+                  ..._slotGroups(day, currency),
                 if (!controller.dayIsEmpty(day))
-                  for (final slot in controller.openSlots) ...[
+                  for (final slot in controller.openSlotsOn(day)) ...[
                     AddSlotRow(slot: slot, onAdd: () => onAddActivity(slot)),
                     const SizedBox(height: WayfareSpace.cardGap),
                   ],
@@ -133,11 +174,7 @@ class TripTab extends StatelessWidget {
                   const SizedBox(height: 10),
                 ],
               ],
-            ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -146,8 +183,10 @@ class TripTab extends StatelessWidget {
   /// Order inside a slot is the start time's to decide, not the finger's:
   /// hand-dragging is out for now, and a card is moved by giving it a time.
   /// Tapping opens it; swiping left reveals edit and delete.
-  List<Widget> _slotGroups(String currency) {
-    final blocks = controller.visibleBlocks;
+  List<Widget> _slotGroups(PlanDay day, String currency) {
+    // The page's own day, not the selected one: a pager builds its
+    // neighbours, and they would otherwise all draw the day on screen.
+    final blocks = controller.visibleBlocksOn(day);
 
     const order = [
       TimeOfDay.morning,
@@ -160,7 +199,7 @@ class TripTab extends StatelessWidget {
       for (final slot in order)
         if (blocks.any((b) => b.timeOfDay == slot))
           _SlotGroup(
-            key: ValueKey('slot-${controller.selectedDay}-${slot.name}'),
+            key: ValueKey('slot-${day.day}-${slot.name}'),
             blocks: blocks.where((b) => b.timeOfDay == slot).toList(),
             members: controller.members,
             currency: currency,

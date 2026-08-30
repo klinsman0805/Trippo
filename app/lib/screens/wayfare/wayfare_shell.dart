@@ -129,9 +129,12 @@ class _WayfareShellState extends State<WayfareShell> {
               : null,
         ),
         Expanded(
-          child: SingleChildScrollView(
-              child: _body(),
-          ),
+          // The Trip tab paginates its days, and a PageView needs a bounded
+          // height — so it scrolls each day itself rather than being handed a
+          // scroll view with none.
+          child: _bodyScrollsItself
+              ? _body()
+              : SingleChildScrollView(child: _body()),
         ),
         if (_controller.tab == WayfareTab.chat)
           RefineComposer(controller: _controller),
@@ -142,6 +145,17 @@ class _WayfareShellState extends State<WayfareShell> {
       ],
     );
   }
+
+  /// Whether the body owns its own scrolling.
+  ///
+  /// Only the planned Trip tab does, and only once it has an itinerary to
+  /// page through — every state before that is an ordinary column.
+  bool get _bodyScrollsItself =>
+      _controller.tab == WayfareTab.itinerary &&
+      _controller.hasPlan &&
+      !_controller.isFailed &&
+      !_controller.needsInfo &&
+      _controller.error == null;
 
   Widget _body() {
     if (_controller.error != null && _controller.plan == null) {

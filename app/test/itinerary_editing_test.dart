@@ -25,6 +25,7 @@ Future<void> pump(
   WidgetTester tester,
   Widget child, {
   WayfarePlatform platform = WayfarePlatform.ios,
+  bool scrollable = true,
 }) async {
   // The theme goes at MaterialApp.builder, exactly as the real app does.
   // A drag lifts the card into the app's Overlay, which sits *above* the
@@ -36,7 +37,11 @@ Future<void> pump(
         platform: platform,
         child: inner ?? const SizedBox.shrink(),
       ),
-      home: Scaffold(body: SingleChildScrollView(child: child)),
+      // The Trip tab paginates and scrolls each day itself, so it wants a
+      // bounded height rather than a scroll view with none.
+      home: Scaffold(
+        body: scrollable ? SingleChildScrollView(child: child) : child,
+      ),
     ),
   );
 }
@@ -281,6 +286,70 @@ void main() {
       expect(find.text('1h 30m'), findsOneWidget);
       expect(find.textContaining('the card reads free'), findsOneWidget);
       expect(find.text('Optional activity'), findsOneWidget);
+    });
+  });
+
+  group('Moving between days', () {
+    WayfareController threeDayController() {
+      final controller = editableController();
+      controller.plan = Plan(
+        conversationalSummary: '',
+        status: PlanStatus.complete,
+        trip: TripSummary.fromJson(const {'currency': 'MYR'}),
+        itinerary: [
+          for (var d = 1; d <= 3; d++)
+            PlanDay(
+              day: d,
+              location: 'Kuala Lumpur',
+              blocks: [block(id: 'blk_$d', activity: 'Day $d activity')],
+            ),
+        ],
+      );
+      return controller;
+    }
+
+    testWidgets('is a swipe, not a redraw', (tester) async {
+      final controller = threeDayController();
+      await pump(tester, dayFor(controller), scrollable: false);
+
+      // A cross-fade draws both days at once through the middle of the
+      // transition, which reads as an overlap however the curves are tuned.
+      // Pages do not overlap, and the gesture is the one people already try.
+      expect(find.byType(PageView), findsOneWidget);
+      expect(find.text('Day 1 activity'), findsOneWidget);
+
+      await tester.drag(find.byType(PageView), const Offset(-400, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Day 2 activity'), findsOneWidget);
+      // The chips follow the page rather than the other way round.
+      expect(controller.selectedDay, 2);
+    });
+
+    testWidgets('a chip moves the pager to its day', (tester) async {
+      final controller = threeDayController();
+      await pump(tester, dayFor(controller), scrollable: false);
+
+      await tester.tap(find.text('Day 3'));
+      await tester.pumpAndSettle();
+
+      expect(controller.selectedDay, 3);
+      expect(find.text('Day 3 activity'), findsOneWidget);
+      expect(find.text('Day 1 activity'), findsNothing);
+    });
+
+    testWidgets('each page shows its own day, not the selected one',
+        (tester) async {
+      final controller = threeDayController();
+      await pump(tester, dayFor(controller), scrollable: false);
+
+      // A pager builds its neighbours. Anything reading `selectedDay` to
+      // decide what to draw would put day 1's activities on every page.
+      await tester.drag(find.byType(PageView), const Offset(-200, 0));
+      await tester.pump();
+
+      expect(find.text('Day 1 activity'), findsOneWidget);
+      expect(find.text('Day 2 activity'), findsOneWidget);
     });
   });
 
@@ -785,7 +854,7 @@ void main() {
     testWidgets('is the start time\'s to decide, not the finger\'s',
         (tester) async {
       final controller = editableController();
-      await pump(tester, dayFor(controller));
+      await pump(tester, dayFor(controller), scrollable: false);
 
       // Hand-dragging is out: the grip lost its gesture to the page's own
       // scroll often enough that it read as broken, and an order the times
@@ -798,7 +867,7 @@ void main() {
     testWidgets('every card can still be swiped to edit or delete',
         (tester) async {
       final controller = editableController();
-      await pump(tester, dayFor(controller));
+      await pump(tester, dayFor(controller), scrollable: false);
 
       expect(find.byType(SwipeableActivity), findsNWidgets(3));
     });
@@ -844,7 +913,7 @@ void main() {
 
     testWidgets('the day buttons are gone from the day itself', (tester) async {
       final controller = editableController();
-      await pump(tester, dayFor(controller));
+      await pump(tester, dayFor(controller), scrollable: false);
 
       // Both moved to the header. At the end of a full day they sat further
       // from the thumb the more there was on it.

@@ -154,10 +154,18 @@ class WayfareController extends ChangeNotifier {
   }
 
   /// The current day's blocks, with optional ones filtered out when hidden.
-  List<PlanBlock> get visibleBlocks {
-    final day = currentDay;
+  List<PlanBlock> get visibleBlocks => visibleBlocksOn(currentDay);
+
+  /// The blocks to draw for one day, optional ones filtered out when hidden.
+  ///
+  /// Day-scoped rather than reading the selection: the Trip tab paginates, so
+  /// it builds the pages either side of the one on screen — and those must
+  /// show their own day, not the selected one.
+  List<PlanBlock> visibleBlocksOn(PlanDay? day) {
     if (day == null) return const [];
-    return showOptional ? day.blocks : day.blocks.where((b) => !b.optional).toList();
+    return showOptional
+        ? day.blocks
+        : day.blocks.where((b) => !b.optional).toList();
   }
 
   int memberIndex(String id) => members.indexWhere((m) => m.id == id);
@@ -199,15 +207,8 @@ class WayfareController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Which way the last day change moved: +1 later, −1 earlier, 0 for a jump
-  /// that is neither (a reload, or a clamp after the trip got shorter).
-  ///
-  /// The Trip tab slides its content in from the side you came from, which
-  /// only reads as movement through the trip if it knows the direction.
-  int dayDirection = 0;
-
   void selectDay(int day) {
-    dayDirection = day == selectedDay ? 0 : (day > selectedDay ? 1 : -1);
+    if (day == selectedDay) return;
     selectedDay = day;
     notifyListeners();
   }
@@ -526,13 +527,16 @@ class WayfareController extends ChangeNotifier {
 
   /// Named slots with nothing in them. `anytime` is deliberately excluded —
   /// it is not a part of the day, so it cannot be "open".
-  List<TimeOfDay> get openSlots => [
+  List<TimeOfDay> get openSlots => openSlotsOn(currentDay);
+
+  /// The parts of one day with nothing in them yet.
+  List<TimeOfDay> openSlotsOn(PlanDay? day) => [
         for (final slot in const [
           TimeOfDay.morning,
           TimeOfDay.afternoon,
           TimeOfDay.evening,
         ])
-          if (blocksIn(slot).isEmpty) slot,
+          if (day != null && !day.blocks.any((b) => b.timeOfDay == slot)) slot,
       ];
 
   /// `2 of 3 slots filled` — counts only the three the flight envelope acts on.

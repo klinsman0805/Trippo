@@ -22,15 +22,24 @@ Future<void> pumpTab(
   WidgetTester tester,
   Widget child, {
   WayfarePlatform platform = WayfarePlatform.ios,
+  bool scrollable = true,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       home: WayfareTheme(
         platform: platform,
-        child: Scaffold(body: SingleChildScrollView(child: child)),
+        // The Trip tab paginates and scrolls each day itself, so it needs a
+        // bounded height rather than a scroll view with none — exactly as the
+        // shell now gives it.
+        child: Scaffold(
+          body: scrollable ? SingleChildScrollView(child: child) : child,
+        ),
       ),
     ),
   );
+  // One frame, not pumpAndSettle: the Refine tab's thinking indicator never
+  // stops, so settling would wait forever.
+  await tester.pump();
 }
 
 WayfareController buildController({
@@ -219,7 +228,7 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
-        ));
+        ), scrollable: false);
 
       expect(find.text('Day 1'), findsOneWidget);
       expect(find.text('Lisbon · Alfama'), findsOneWidget);
@@ -243,7 +252,7 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
-        ));
+        ), scrollable: false);
 
       expect(find.text('Sunset drinks at Senhora do Monte'), findsNothing);
       expect(find.text('€12 pp planned'), findsOneWidget);
@@ -261,7 +270,7 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
-        ));
+        ), scrollable: false);
 
       // The morning block covers 2 of 3 travellers, so with groups on it
       // names them rather than saying "Everyone". Off, the footer drops the
@@ -285,7 +294,7 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
-        ));
+        ), scrollable: false);
 
       expect(find.text('Updated from your last chat request.'), findsOneWidget);
     });
