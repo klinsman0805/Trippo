@@ -23,12 +23,12 @@ class WayfareFonts {
   /// variable across 100–900, so the weight is a decision rather than whatever
   /// the file happens to contain, and its softened, slightly wonky letterforms
   /// have the warmth this palette is built around.
-  static const displayFamily = 'Julius Sans One';
+  static const displayFamily = 'Radley';
 
   /// Semibold. Heavy enough to hold a trip title against the cream background
   /// without the headings turning into a slab — one line to change if it wants
   /// more (700) or less (500).
-  static const displayWeight = FontWeight.w800;
+  static const displayWeight = FontWeight.w500;
 
   /// The family applied to a style, for the places that build one directly.
   ///

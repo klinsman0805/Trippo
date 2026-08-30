@@ -312,7 +312,7 @@ class _DayChip extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                     height: 1.25,
                     color: selected
@@ -323,7 +323,7 @@ class _DayChip extends StatelessWidget {
                 Text(
                   sub,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                     height: 1.25,
                     color: (selected
@@ -495,7 +495,7 @@ class ActivityCard extends StatelessWidget {
             const SizedBox(height: 7),
             Text(
               _description,
-              style: WayfareType.body(13.5, color: WayfareColors.muted),
+              style: WayfareType.body(14.5, color: WayfareColors.muted),
             ),
           ],
           if (_hasFooter) ...[
@@ -536,7 +536,7 @@ class ActivityCard extends StatelessWidget {
           Text(
             formatClock(block.startTime!),
             style: const TextStyle(
-              fontSize: 12.5,
+              fontSize: 14,
               fontWeight: FontWeight.w700,
               color: WayfareColors.ink,
             ),
@@ -545,7 +545,7 @@ class ActivityCard extends StatelessWidget {
         ],
         Text(
           block.timeOfDay.name.toUpperCase(),
-          style: WayfareType.eyebrow(11.5, color: const Color(0xFF6D6255)),
+          style: WayfareType.eyebrow(12.5, color: const Color(0xFF6D6255)),
         ),
       ],
     );
@@ -558,11 +558,14 @@ class ActivityCard extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 260),
+          // Widened with the type: at 17.5 a title wrapped to a second line
+          // sooner than it needed to, and the pills it makes room for sit
+          // beside it in a Wrap rather than fighting it for the row.
+          constraints: const BoxConstraints(maxWidth: 285),
           child: Text(
             block.activity,
             style: const TextStyle(
-              fontSize: 16,
+              fontSize: 17.5,
               fontWeight: FontWeight.w700,
               height: 1.28,
             ),
@@ -607,7 +610,7 @@ class ActivityCard extends StatelessWidget {
       if (parts.isEmpty) return const SizedBox.shrink();
       return Text(
         parts.join(' · '),
-        style: const TextStyle(fontSize: 12.5, color: WayfareColors.mutedLight),
+        style: const TextStyle(fontSize: 13.5, color: WayfareColors.mutedLight),
       );
     }
     return _fitRow(memberIndexes);
