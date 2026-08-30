@@ -18,16 +18,17 @@ class WayfareFonts {
 
   /// The display face: trip titles, the budget headline, sheet headings.
   ///
-  /// Was Instrument Serif, which ships one weight — 400 — and no bold. That
-  /// is why it read thin: there was nothing heavier to reach for. DM Serif
-  /// Display is the same kind of face, a transitional serif drawn for large
-  /// sizes, but with far more weight in the stems at the same point size.
-  static const displayFamily = 'DM Serif Display';
+  /// Was Instrument Serif, which ships one weight — 400 — and no bold, which
+  /// is why it read thin: there was nothing heavier to reach for. Fraunces is
+  /// variable across 100–900, so the weight is a decision rather than whatever
+  /// the file happens to contain, and its softened, slightly wonky letterforms
+  /// have the warmth this palette is built around.
+  static const displayFamily = 'Fraunces';
 
-  /// DM Serif Display also ships a single weight, so this is 400 — which on
-  /// this face is already heavier than Instrument Serif's bold would have
-  /// been. Kept named so a variable face can be swapped in without hunting.
-  static const displayWeight = FontWeight.w400;
+  /// Semibold. Heavy enough to hold a trip title against the cream background
+  /// without the headings turning into a slab — one line to change if it wants
+  /// more (700) or less (500).
+  static const displayWeight = FontWeight.w600;
 
   /// The family applied to a style, for the places that build one directly.
   ///
