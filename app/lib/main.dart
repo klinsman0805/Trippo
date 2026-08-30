@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'api/api_client.dart';
 import 'api/trippo_api.dart';
 import 'config.dart';
+import 'design/fonts.dart';
 import 'design/theme.dart';
 import 'screens/trip_list_screen.dart';
 import 'screens/wayfare/flights/flights_screen.dart';
@@ -35,10 +36,14 @@ class TrippoApp extends StatelessWidget {
     const directScreen =
         String.fromEnvironment('TRIPPO_SCREEN', defaultValue: '');
 
-    return MaterialApp(
+    return ValueListenableBuilder<String?>(
+      // Rebuilt when the card font is switched from the preview sheet, so the
+      // choice can be made by looking at the real screens.
+      valueListenable: WayfareFonts.family,
+      builder: (context, fontFamily, _) => MaterialApp(
       title: 'Wayfare',
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(platform),
+      theme: buildAppTheme(platform, fontFamily: fontFamily),
       // Above the Navigator, so routes, dialogs and sheets all inherit it.
       //
       // Providing the theme inside a screen instead looks like it works until
@@ -72,6 +77,7 @@ class TrippoApp extends StatelessWidget {
                 ),
               ),
             ),
+      ),
     );
   }
 }

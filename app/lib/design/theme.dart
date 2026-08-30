@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'fonts.dart';
 import 'tokens.dart';
 
 /// Which platform dress to render. One component, two dresses — the handoff's
@@ -90,40 +91,53 @@ abstract final class WayfareType {
     double? height,
     double? letterSpacing,
   }) =>
-      TextStyle(
-        fontSize: size,
-        fontWeight: weight,
-        color: color ?? WayfareColors.ink,
-        height: height,
-        letterSpacing: letterSpacing,
+      WayfareFonts.apply(
+        TextStyle(
+          fontSize: size,
+          fontWeight: weight,
+          color: color ?? WayfareColors.ink,
+          height: height,
+          letterSpacing: letterSpacing,
+        ),
       );
 
   /// Eyebrow / overline: 10.5–11.5px, 700, uppercase, wide tracking.
-  static TextStyle eyebrow(double size, {required Color color}) => TextStyle(
-        fontSize: size,
-        fontWeight: FontWeight.w700,
-        color: color,
-        letterSpacing: size * 0.065,
+  static TextStyle eyebrow(double size, {required Color color}) =>
+      WayfareFonts.apply(
+        TextStyle(
+          fontSize: size,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: size * 0.065,
+        ),
       );
 
   /// Body copy: line-height 1.45–1.55.
   static TextStyle body(double size, {Color? color, double height = 1.5}) =>
-      TextStyle(
-        fontSize: size,
-        color: color ?? WayfareColors.muted,
-        height: height,
+      WayfareFonts.apply(
+        TextStyle(
+          fontSize: size,
+          color: color ?? WayfareColors.muted,
+          height: height,
+        ),
       );
 }
 
 /// The MaterialApp theme. Mostly a carrier for the background and font family —
 /// the design is specific enough that most surfaces are built explicitly rather
 /// than inherited from Material defaults.
-ThemeData buildAppTheme(WayfarePlatform platform) {
+ThemeData buildAppTheme(WayfarePlatform platform, {String? fontFamily}) {
   final base = ThemeData(useMaterial3: true);
-  // Roboto on Android, San Francisco (via the system default) on iOS.
-  final textTheme = platform == WayfarePlatform.android
-      ? GoogleFonts.robotoTextTheme(base.textTheme)
-      : base.textTheme;
+  // The family belongs on the theme, not only on WayfareType: most styles in
+  // the app are plain TextStyles with no family, and a Text merges those onto
+  // the inherited DefaultTextStyle — so setting it here reaches every one of
+  // them, including the card titles.
+  final textTheme = fontFamily != null
+      ? GoogleFonts.getTextTheme(fontFamily, base.textTheme)
+      // Roboto on Android, San Francisco (via the system default) on iOS.
+      : platform == WayfarePlatform.android
+          ? GoogleFonts.robotoTextTheme(base.textTheme)
+          : base.textTheme;
 
   return base.copyWith(
     scaffoldBackgroundColor: WayfareColors.bgApp,
