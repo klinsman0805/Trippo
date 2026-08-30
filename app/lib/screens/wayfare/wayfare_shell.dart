@@ -181,22 +181,15 @@ class _WayfareShellState extends State<WayfareShell> {
 
   void _selectTab(WayfareTab tab) {
     if (tab == WayfareTab.chat && !_controller.hasPlan) {
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: WayfareColors.ink,
-            content: Text(
-              _controller.trip?.startDate == null
-                  ? 'Set your dates first, then plan an itinerary — refining '
-                      'needs something to change.'
-                  : 'Plan an itinerary first — refining needs something to '
-                      'change.',
-              style: const TextStyle(color: WayfareColors.generatingInk),
-            ),
-          ),
-        );
+      // Top of the screen: a message at the bottom would cover the nav bar,
+      // which is where the tab it is explaining lives.
+      showWayfareToast(
+        context,
+        _hasDates
+            ? 'Plan an itinerary first — refining needs something to change.'
+            : 'Set your dates first, then plan an itinerary — refining needs '
+                'something to change.',
+      );
       return;
     }
     _controller.goTo(tab);
@@ -358,13 +351,39 @@ class _WayfareShellState extends State<WayfareShell> {
     if (trip == null) return;
 
     final now = DateTime.now();
-    final range = await showDateRangePicker(
+    // `showDateRangePicker` has no say over how it arrives — it cuts in on a
+    // plain fade. Presenting the same dialog ourselves lets it rise into
+    // place, which is what a full-screen sheet should do.
+    final range = await showGeneralDialog<DateTimeRange>(
       context: context,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 2),
-      initialDateRange: _existingRange(trip),
-      helpText: 'When are you travelling?',
-      saveText: 'Set dates',
+      barrierDismissible: true,
+      barrierLabel: 'When are you travelling?',
+      barrierColor: WayfareColors.scrim,
+      transitionDuration: const Duration(milliseconds: 280),
+      transitionBuilder: (context, animation, secondary, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: Tween(
+              begin: const Offset(0, 0.06),
+              end: Offset.zero,
+            ).animate(curved),
+            child: child,
+          ),
+        );
+      },
+      pageBuilder: (context, _, _) => DateRangePickerDialog(
+        firstDate: DateTime(now.year - 1),
+        lastDate: DateTime(now.year + 2),
+        initialDateRange: _existingRange(trip),
+        helpText: 'When are you travelling?',
+        saveText: 'Set dates',
+      ),
     );
     if (range == null) return;
 
@@ -797,8 +816,10 @@ class _WayfareShellState extends State<WayfareShell> {
               ),
             // Once the trip has days, the two ways of *setting* dates are
             // both answering a question that has been answered. What is left
-            // is changing them, which is one row rather than two.
-            if (_controller.hasPlan)
+            // is changing them, which is one row rather than two — and it
+            // belongs from the moment there are dates, not from the moment
+            // there is a plan.
+            if (_hasDates)
               ListTile(
                 leading:
                     const Icon(Icons.event_outlined, color: WayfareColors.ink),
@@ -1603,10 +1624,13 @@ class ItineraryStartOptions extends StatelessWidget {
         if (importedPlaces.isEmpty) ...[
           _card(
             context,
-            eyebrow: 'Start from what you saved',
+            eyebrow: 'Quickest',
             eyebrowColor: WayfareColors.accent,
-            title: 'Paste a link you already saved',
-            cta: 'Import a link',
+            title: 'You have probably found the places already',
+            body: 'A 小红书 post, a saved list, a blog you bookmarked. Paste '
+                'it and we pull the places out, so the plan is built from '
+                'what you actually want to see.',
+            cta: 'Paste a link',
             filled: true,
             onTap: onImportLink,
           ),
@@ -1614,22 +1638,30 @@ class ItineraryStartOptions extends StatelessWidget {
         ],
         _card(
           context,
-          eyebrow: 'Have it planned',
+          eyebrow: 'Hands off',
           eyebrowColor: WayfareColors.accent,
           title: dayCount > 0
-              ? 'Let the planner fill the $dayCount days'
-              : 'Let the planner fill your days',
-          cta: 'Generate the itinerary',
+              ? 'Let the planner take the $dayCount days'
+              : 'Let the planner take it from here',
+          body: sourceCount > 0
+              ? 'It works from the places you saved, fills the gaps around '
+                  'them, and you can change anything afterwards.'
+              : 'It picks somewhere to start, works around your dates, and '
+                  'you can change anything afterwards.',
+          cta: 'Plan it for me',
           filled: sourceCount > 0,
           onTap: canGenerate ? onGenerate : null,
         ),
         const SizedBox(height: WayfareSpace.cardGap),
         _card(
           context,
-          eyebrow: 'Write it yourself',
+          eyebrow: 'Hands on',
           eyebrowColor: WayfareColors.writtenInk,
-          title: 'Build it by hand',
-          cta: 'Add the first activity',
+          title: 'Start with the one thing you know',
+          body: 'The dinner you booked, the flight you are meeting. Put it '
+              'down and build outwards — the planner can still fill the rest '
+              'later.',
+          cta: 'Add an activity',
           filled: false,
           onTap: onWriteFirst,
         ),
@@ -1642,6 +1674,7 @@ class ItineraryStartOptions extends StatelessWidget {
     required String eyebrow,
     required Color eyebrowColor,
     required String title,
+    required String body,
     required String cta,
     required bool filled,
     required VoidCallback? onTap,
@@ -1664,6 +1697,8 @@ class ItineraryStartOptions extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(title, style: WayfareType.ui(16, weight: FontWeight.w700)),
+          const SizedBox(height: 7),
+          Text(body, style: WayfareType.body(13.5, color: WayfareColors.subhead)),
           const SizedBox(height: 16),
           if (filled)
             WayfarePrimaryButton(label: cta, onPressed: onTap)

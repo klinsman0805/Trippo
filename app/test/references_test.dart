@@ -570,13 +570,10 @@ void main() {
                   disabled: const {WayfareTab.chat},
                   onSelect: (tab) {
                     if (tab == WayfareTab.chat) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Plan an itinerary first — refining needs '
-                            'something to change.',
-                          ),
-                        ),
+                      showWayfareToast(
+                        context,
+                        'Plan an itinerary first — refining needs something '
+                        'to change.',
                       );
                       return;
                     }
@@ -604,6 +601,23 @@ void main() {
       expect(
         find.textContaining('refining needs something to change'),
         findsOneWidget,
+      );
+
+      // At the top of the screen. At the bottom it would have covered the
+      // nav bar — the very thing it is explaining.
+      final toast = tester.getRect(
+        find.textContaining('refining needs something to change'),
+      );
+      final nav = tester.getRect(find.byType(WayfareNavBar));
+      expect(toast.bottom, lessThan(nav.top));
+
+      // It leaves on its own — and the test has to outlive it, or its timers
+      // are still pending when the tree is torn down.
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('refining needs something to change'),
+        findsNothing,
       );
     });
   });

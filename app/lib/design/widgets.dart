@@ -201,6 +201,94 @@ class _WayfareDismissibleSheetState extends State<WayfareDismissibleSheet>
   }
 }
 
+/// A brief message at the top of the screen.
+///
+/// Not a SnackBar: those are anchored to the bottom, where this app keeps its
+/// navigation — so an explanation of why a tab is unavailable appeared on top
+/// of the tab it was explaining. This comes down from the top, clear of
+/// everything, and leaves on its own.
+Future<void> showWayfareToast(BuildContext context, String message) async {
+  final overlay = Overlay.maybeOf(context);
+  if (overlay == null) return;
+
+  final entry = OverlayEntry(
+    builder: (context) => _WayfareToast(message: message),
+  );
+  overlay.insert(entry);
+  await Future<void>.delayed(const Duration(milliseconds: 3400));
+  entry.remove();
+}
+
+class _WayfareToast extends StatefulWidget {
+  const _WayfareToast({required this.message});
+
+  final String message;
+
+  @override
+  State<_WayfareToast> createState() => _WayfareToastState();
+}
+
+class _WayfareToastState extends State<_WayfareToast>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _in = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _in.forward();
+    // Starts leaving before the entry is removed, so it fades rather than
+    // vanishing mid-sentence.
+    Future<void>.delayed(const Duration(milliseconds: 3000), () {
+      if (mounted) _in.reverse();
+    });
+  }
+
+  @override
+  void dispose() {
+    _in.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final curved = CurvedAnimation(parent: _in, curve: Curves.easeOutCubic);
+
+    return Positioned(
+      top: MediaQuery.paddingOf(context).top + 8,
+      left: 14,
+      right: 14,
+      child: FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween(
+            begin: const Offset(0, -0.4),
+            end: Offset.zero,
+          ).animate(curved),
+          child: Material(
+            color: WayfareColors.ink,
+            borderRadius: BorderRadius.circular(14),
+            elevation: 8,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              child: Text(
+                widget.message,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  height: 1.4,
+                  color: WayfareColors.generatingInk,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A 999-radius pill with a border — the OPTIONAL badge, conflict tags, pace
 /// chips. Sizes vary per use, so they're parameters rather than variants.
 class WayfarePill extends StatelessWidget {
