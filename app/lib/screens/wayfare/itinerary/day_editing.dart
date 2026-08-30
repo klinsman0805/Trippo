@@ -350,21 +350,27 @@ class _SlidableState extends State<Slidable>
         animation: _controller,
         builder: (context, child) {
           final offset = _controller.value * _actionsWidth;
+          final closed = _controller.value == 0;
           return Stack(
             children: [
-              Positioned.fill(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    for (final action in widget.endActions)
-                      GestureDetector(
-                        onTap: _close,
-                        behavior: HitTestBehavior.translucent,
-                        child: action,
-                      ),
-                  ],
+              // Only while the row is actually open. These sit behind the
+              // card, and an optional activity's card is translucent — so
+              // Edit and Delete showed through it, unswiped, on every
+              // optional block on the day.
+              if (!closed)
+                Positioned.fill(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      for (final action in widget.endActions)
+                        GestureDetector(
+                          onTap: _close,
+                          behavior: HitTestBehavior.translucent,
+                          child: action,
+                        ),
+                    ],
+                  ),
                 ),
-              ),
               Transform.translate(
                 offset: Offset(-offset, 0),
                 child: child,

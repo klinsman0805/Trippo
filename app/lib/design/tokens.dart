@@ -87,6 +87,10 @@ abstract final class WayfareColors {
   /// it never reads as the amber "the flight left no time" treatment.
   static const todoDashed = Color(0xFFD6CAB6);
   static const todoBg = Color(0xFFFBF7EF);
+
+  /// An optional activity's card: `surface` at 60% over the app background,
+  /// resolved to a flat colour so nothing behind the card can show through it.
+  static const optionalCard = Color(0xFFFAF4EC);
   static const gripLine = Color(0xFFA99C8B);
 
   // Loading skeletons

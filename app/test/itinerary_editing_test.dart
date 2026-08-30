@@ -941,9 +941,13 @@ void main() {
         ),
       );
 
-      // Reading stays risk-free: the actions sit behind the card, so nothing
-      // is reachable until the card is deliberately moved off them.
-      await tester.tap(find.text('Delete'), warnIfMissed: false);
+      // Reading stays risk-free. The actions are not merely covered by the
+      // card — they are not drawn at all until it is deliberately moved,
+      // because an optional activity's card used to be translucent and let
+      // Edit and Delete show through it unswiped.
+      expect(find.text('Delete'), findsNothing);
+      expect(find.text('Edit'), findsNothing);
+      await tester.tap(find.byType(ActivityCard));
       await tester.pumpAndSettle();
       expect(edits, 0);
       expect(deletes, 0);

@@ -495,9 +495,10 @@ class ActivityCard extends StatelessWidget {
     final card = Container(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
       decoration: BoxDecoration(
-        color: block.optional
-            ? WayfareColors.surface.withValues(alpha: 0.6)
-            : WayfareColors.surface,
+        // Optional cards read as lighter than required ones, but the colour
+        // is mixed rather than made transparent: an alpha here let whatever
+        // sat behind the card show through it.
+        color: block.optional ? WayfareColors.optionalCard : WayfareColors.surface,
         borderRadius: theme.card,
         border: block.optional
             ? null // drawn by the dashed painter below
