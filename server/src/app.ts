@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance, type RouteOptions } from 'fastify';
 import { ZodError } from 'zod';
 import { env, features } from './config/env.js';
 import { localVerifier, supabaseVerifier, type Caller, type Verifier } from './lib/auth.js';
+import { db } from './db/index.js';
 import { AppError, notFound } from './lib/errors.js';
 import { getPlan } from './modules/planner/service.js';
 import { tripOwner } from './modules/trips/repo.js';
@@ -121,6 +122,15 @@ export async function buildApp(verify: Verifier = callerVerifier()): Promise<Fas
   app.get('/health', async () => ({
     status: 'ok',
     checked_at: new Date().toISOString(),
+    // Asked, not assumed: after a deploy this is the line that says the
+    // connection string works. It is also what a scheduled ping relies on to
+    // keep a free Supabase project from pausing — a ping that never reached
+    // the database would not count as activity.
+    database: await db.one('SELECT 1 AS ok').then(
+      () => 'ok',
+      () => 'unreachable',
+    ),
+    sign_in: env.SUPABASE_URL ? 'supabase' : 'local',
     features: {
       planner: features.planner,
       // Named for the same reason the schedule provider is: a run that is slow,

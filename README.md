@@ -82,6 +82,70 @@ cd app && flutter run
 `localhost:8080` elsewhere. Override with
 `--dart-define=TRIPPO_API_BASE=https://your-host`.
 
+Locally nothing else is needed: the server keeps its data in an embedded
+Postgres (PGlite, in `server/data/pglite`) and treats everyone as one local
+user. Supabase and Cloud Run are for the deployed copy — see below.
+
+## Deploying: Supabase + Cloud Run
+
+The API runs on Cloud Run in Singapore; data and sign-in are Supabase, also in
+Singapore. Both stay inside their free tiers at this size. One-time setup,
+then `./scripts/deploy-cloudrun.sh` for every deploy.
+
+**1. Supabase** — [supabase.com](https://supabase.com), new project, region
+**Southeast Asia (Singapore)**. Keep the database password.
+
+- Authentication → Sign In / Providers → turn on **Anonymous sign-ins**, and
+  **Manual linking** (so an anonymous user can later attach Sign in with Apple
+  and keep their trips).
+- Project Settings → API Keys: note the **publishable key** (`sb_publishable_…`)
+  and the project URL (`https://<ref>.supabase.co`). Both are safe in the app.
+- Connect → **Transaction pooler** (port 6543): the connection string, with the
+  password filled in. This one is secret; the deploy script asks for it.
+
+The server creates its own tables on first start, with row-level security on
+and no policies, so the anon key the app ships can read nothing directly.
+
+**2. Google Cloud** — [console.cloud.google.com](https://console.cloud.google.com),
+new project, link a billing account (required even inside the free tier), then
+Billing → Budgets & alerts → a **$1 budget** with email alerts. Install and sign
+in to the CLI:
+
+```bash
+brew install --cask google-cloud-sdk
+gcloud auth login
+```
+
+**3. Deploy:**
+
+```bash
+PROJECT_ID=your-gcp-project SUPABASE_URL=https://<ref>.supabase.co ./scripts/deploy-cloudrun.sh
+```
+
+The first run asks for the Supabase connection string, the Gemini key and,
+optionally, an AeroDataBox key (booked-flight lookup), and keeps them in
+Secret Manager. It ends by calling `/health`, which should say
+`"database":"ok"` and `"sign_in":"supabase"`.
+
+**4. Point the app at it:**
+
+```bash
+TRIPPO_API_BASE=https://trippo-api-….a.run.app \
+SUPABASE_URL=https://<ref>.supabase.co \
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_… \
+./scripts/dev.sh
+```
+
+**5. Keep the database awake** — free Supabase projects pause after a week
+idle. `.github/workflows/keep-awake.yml` pings `/health` (which queries the
+database) every three days once the repository variable `TRIPPO_API_URL` is
+set and the workflow is on the default branch.
+
+What the deployed server enforces: every `/v1` request needs a Supabase token;
+a trip, and everything under it, is visible only to its owner (anyone else gets
+a 404); per-person rate limits on the routes that spend model quota or call
+outside services; and it refuses to start in production without `SUPABASE_URL`.
+
 ## The modules
 
 ### Link ingestion (`server/src/modules/ingest`)
