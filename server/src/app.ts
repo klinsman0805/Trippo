@@ -1,8 +1,5 @@
 import cors from '@fastify/cors';
-import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { ZodError } from 'zod';
 import { env, features } from './config/env.js';
 import { AppError } from './lib/errors.js';
@@ -111,19 +108,6 @@ export async function buildApp(): Promise<FastifyInstance> {
     },
     { prefix: '/v1' },
   );
-
-  if (env.WEB_DIR) {
-    const root = resolve(env.WEB_DIR);
-    // Loud rather than silent: a deploy whose app build failed would
-    // otherwise answer `/` with a JSON 404 and look like a dead server.
-    if (!existsSync(resolve(root, 'index.html'))) {
-      throw new Error(`WEB_DIR is set to ${root}, but there is no index.html in it.`);
-    }
-    // The app routes with the URL hash, so `/` is the only page there is —
-    // no fallback to index.html needed, and an unknown path still gets the
-    // API's own JSON 404.
-    await app.register(fastifyStatic, { root, prefix: '/' });
-  }
 
   return app;
 }

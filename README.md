@@ -559,24 +559,6 @@ npx tsx scripts/seed-demo.ts
 - Auth. There is none — every trip is readable by anyone who can reach the
   server. Fine locally, not for a deploy.
 
-## Trying it with only a phone
-
-No computer needed: Render builds the root `Dockerfile` into one service that
-serves the API under `/v1` and the Flutter web app at `/`, and the phone opens
-that address in a browser. `render.yaml` describes the whole thing.
-
-1. On render.com, sign in with GitHub and choose **New → Blueprint**.
-2. Pick this repository. Render reads `render.yaml` and asks for
-   `GEMINI_API_KEY` (from https://aistudio.google.com/apikey).
-3. **Apply**. The first build takes ~10 minutes; later ones are faster.
-4. Open the service's `https://….onrender.com` address in Safari, then
-   Share → **Add to Home Screen** for a full-screen icon.
-
-Every push to the branch in `render.yaml` redeploys. On the free plan the
-service sleeps after ~15 idle minutes (the next visit waits about a minute),
-and its disk is not kept — **trips disappear after a sleep or a redeploy**.
-Fine for trying a change, not for keeping a real trip.
-
 ## Running it on a phone
 
 The server binds `0.0.0.0:8080`, so anything on the same network can reach it.

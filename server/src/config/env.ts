@@ -26,16 +26,6 @@ const EnvSchema = z.object({
 
   DATABASE_PATH: z.string().default('./data/trippo.db'),
 
-  /**
-   * A built Flutter web app to serve at `/`, next to the API under `/v1`.
-   *
-   * Unset locally, where the app runs natively and talks to the API directly.
-   * Set on a deploy that has to be usable from a phone browser with no
-   * computer involved: one address serves both, so the app needs no idea at
-   * build time where its API will live.
-   */
-  WEB_DIR: z.string().optional(),
-
   // Planner (Google Gemini). Without this the /plan endpoints return 503.
   // Free keys come from https://aistudio.google.com/apikey
   GEMINI_API_KEY: z.string().optional(),
