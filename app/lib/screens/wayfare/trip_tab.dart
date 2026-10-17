@@ -10,6 +10,9 @@ import '../../models/trip.dart';
 import '../../state/wayfare_controller.dart';
 import 'formatting.dart';
 import 'itinerary/day_editing.dart';
+// `spellOut`, shared with the questions screen so "two guesses" and "TWO
+// ANSWERS NEEDED" count the same way.
+import 'needs_info.dart';
 
 /// Trip tab: one day at a time, paginated.
 ///
@@ -26,6 +29,7 @@ class TripTab extends StatefulWidget {
     required this.onAddActivity,
     required this.onEditActivity,
     required this.onRemoveActivity,
+    required this.onAnswerQuestions,
   });
 
   final WayfareController controller;
@@ -34,6 +38,9 @@ class TripTab extends StatefulWidget {
   final void Function(TimeOfDay slot) onAddActivity;
   final ValueChanged<PlanBlock> onEditActivity;
   final ValueChanged<PlanBlock> onRemoveActivity;
+
+  /// Opens the planner's outstanding questions from the band above the days.
+  final VoidCallback onAnswerQuestions;
 
   @override
   State<TripTab> createState() => _TripTabState();
@@ -48,6 +55,7 @@ class _TripTabState extends State<TripTab> {
   void Function(TimeOfDay) get onAddActivity => widget.onAddActivity;
   ValueChanged<PlanBlock> get onEditActivity => widget.onEditActivity;
   ValueChanged<PlanBlock> get onRemoveActivity => widget.onRemoveActivity;
+  VoidCallback get onAnswerQuestions => widget.onAnswerQuestions;
 
   int get _indexOfSelected {
     final days = controller.plan?.itinerary ?? const [];
@@ -124,6 +132,15 @@ class _TripTabState extends State<TripTab> {
       child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Above the short-day band: a guess the planner is carrying
+                // applies to the whole plan, where a shortened day is about
+                // this one day.
+                if (controller.showQuestionsPrompt)
+                  OpenQuestionsBand(
+                    questions: controller.questions,
+                    onAnswer: onAnswerQuestions,
+                    onDismiss: controller.dismissQuestions,
+                  ),
                 if (controller.dateEnvelope?.shortDayFor(day.day) case final short?)
                   ShortDayBand(
                     short: short,
@@ -502,6 +519,12 @@ class ActivityCard extends StatelessWidget {
             const SizedBox(height: 11),
             _footer(fit),
           ],
+          // Last line on the card, under the facts rather than among them:
+          // where the activity came from is about the card, not part of it.
+          if (block.isFromReference) ...[
+            SizedBox(height: _hasFooter ? 7 : 11),
+            _provenance(),
+          ],
         ],
       ),
     );
@@ -573,22 +596,48 @@ class ActivityCard extends StatelessWidget {
         ),
         if (block.optional) WayfarePill.optional(),
         if (WayfareFeatures.groups && block.isMine) WayfarePill.yours(),
-        // Provenance, reduced to a mark. The named source took a whole line
-        // on every card; this keeps the fact that an activity came from
-        // something the traveller saved without spending a row on it. The
-        // source is named in full on the activity itself.
-        if (block.isFromReference)
-          Semantics(
-            label: block.fromSourceTitle == null
-                ? 'From a place you saved'
-                : 'From your link: ${block.fromSourceTitle}',
-            child: const Icon(
-              Icons.link,
-              size: 14,
-              color: WayfareColors.accent,
+      ],
+    );
+  }
+
+  /// Where this activity came from, named.
+  ///
+  /// This was a bare link glyph for a while, to keep the card compact. The
+  /// glyph was the wrong economy: that an item resolved against something the
+  /// traveller actually saved is the one claim this app makes that a generated
+  /// itinerary cannot, and an unlabelled icon makes it only to a screen
+  /// reader. So the source is named again — in the footer rather than on a row
+  /// of its own, which is what made it expensive before.
+  ///
+  /// `isFromReference` means the planner's item resolved to a stored place, so
+  /// the line is a statement about Trippo's own records, never about what the
+  /// model claimed.
+  Widget _provenance() {
+    final source = block.fromSourceTitle;
+
+    return Semantics(
+      label: source == null
+          ? 'From a place you saved'
+          : 'From your link: $source',
+      excludeSemantics: true,
+      child: Row(
+        children: [
+          const Icon(Icons.link, size: 13, color: WayfareColors.accent),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              source == null ? 'From a place you saved' : 'From $source',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12.5,
+                height: 1.2,
+                color: WayfareColors.accent,
+              ),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -837,5 +886,179 @@ class _ShortDayBandState extends State<ShortDayBand> {
     return short.reason == 'late_arrival'
         ? 'Day ${short.day} runs from ${formatClock(short.at)}, not the morning.'
         : 'Day ${short.day} ends at ${formatClock(short.at)}.';
+  }
+}
+
+/// The band above the days when the planner had to guess at something.
+///
+/// A `needs_info` run used to replace the itinerary with its list of
+/// questions, and the draft that same run produced was discarded. That is
+/// backwards: the plan is the thing worth seeing, and an unanswered question
+/// is a refinement waiting to happen rather than a gate in front of one. So
+/// the questions live up here, collapsed, naming what was guessed — in the
+/// info blue, because a guess the planner admits to is not the same kind of
+/// fact as a flight that cut the day short.
+class OpenQuestionsBand extends StatefulWidget {
+  const OpenQuestionsBand({
+    super.key,
+    required this.questions,
+    required this.onAnswer,
+    required this.onDismiss,
+  });
+
+  final List<ClarifyingQuestion> questions;
+
+  /// Opens the questions themselves. Owned by the shell, which navigates.
+  final VoidCallback onAnswer;
+
+  /// "Keep as is" — the guesses stand and the band goes away.
+  final VoidCallback onDismiss;
+
+  @override
+  State<OpenQuestionsBand> createState() => _OpenQuestionsBandState();
+}
+
+class _OpenQuestionsBandState extends State<OpenQuestionsBand> {
+  /// Collapsed by default, like the short-day band: the headline is the whole
+  /// finding, and the questions themselves are worth reading when you intend
+  /// to answer them, not on every scroll past.
+  bool _open = false;
+
+  static const _duration = Duration(milliseconds: 240);
+  static const _curve = Curves.easeOutCubic;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = WayfareTheme.of(context);
+    final count = widget.questions.length;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Semantics(
+        button: true,
+        expanded: _open,
+        child: Material(
+          color: WayfareColors.infoBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: theme.cardLg,
+            side: const BorderSide(color: WayfareColors.infoBorderAlt, width: 1.5),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            WayfareEyebrow(
+                              '${spellOut(count)} '
+                              '${count == 1 ? 'guess' : 'guesses'}',
+                              color: WayfareColors.info,
+                              size: 11.5,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              count == 1
+                                  ? 'The plan below rests on one guess.'
+                                  : 'The plan below rests on $count guesses.',
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w500,
+                                height: 1.3,
+                                color: WayfareColors.ink,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      AnimatedRotation(
+                        turns: _open ? 0.5 : 0,
+                        duration: _duration,
+                        curve: _curve,
+                        child: const Icon(
+                          Icons.expand_more,
+                          size: 20,
+                          color: WayfareColors.info,
+                        ),
+                      ),
+                    ],
+                  ),
+                  ClipRect(
+                    child: AnimatedAlign(
+                      alignment: Alignment.topLeft,
+                      heightFactor: _open ? 1 : 0,
+                      duration: _duration,
+                      curve: _curve,
+                      child: AnimatedOpacity(
+                        opacity: _open ? 1 : 0,
+                        duration: _duration,
+                        curve: _curve,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 10, right: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // What was guessed, in the planner's own words,
+                              // so the decision to answer is informed before
+                              // the screen opens.
+                              for (final question in widget.questions) ...[
+                                Text(
+                                  '— ${question.question}',
+                                  style: WayfareType.body(
+                                    13.5,
+                                    color: WayfareColors.infoBody,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                              ],
+                              const SizedBox(height: 7),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: WayfareSecondaryButton(
+                                      label: count == 1
+                                          ? 'Answer it'
+                                          : 'Answer them',
+                                      onPressed: widget.onAnswer,
+                                      background: WayfareColors.infoBgAlt,
+                                      foreground: WayfareColors.info,
+                                      minHeight: 42,
+                                      fontSize: 13.5,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: WayfareSecondaryButton(
+                                      label: 'Keep as is',
+                                      onPressed: widget.onDismiss,
+                                      foreground: WayfareColors.muted,
+                                      minHeight: 42,
+                                      fontSize: 13.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

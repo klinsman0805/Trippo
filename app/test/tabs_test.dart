@@ -90,9 +90,15 @@ const _ruth = Member(
   accessibilityNeeds: ['Limited stairs'],
 );
 
-Plan samplePlan({bool overBudget = true}) => Plan.fromJson({
+Plan samplePlan({
+  bool overBudget = true,
+  List<Map<String, dynamic>> questions = const [],
+}) =>
+    Plan.fromJson({
       'conversational_summary': 'Built around slow mornings.',
-      'status': 'complete',
+      // A plan that came back with questions is a `needs_info` plan — and,
+      // as of the draft-always-renders change, still a plan.
+      'status': questions.isEmpty ? 'complete' : 'needs_info',
       'missing_info': <String>[],
       'trip': {
         'title': 'Portugal, Slowly',
@@ -176,8 +182,28 @@ Plan samplePlan({bool overBudget = true}) => Plan.fromJson({
       ],
       'packing_and_prep_notes': <String>[],
       'verify_before_booking': <String>[],
-      'clarifying_questions': <String>[],
+      'clarifying_questions': questions,
     });
+
+/// Two questions of the kind a `needs_info` run comes back with.
+const _twoQuestions = [
+  {
+    'id': 'budget',
+    'question': 'What is the budget per person?',
+    'why': 'Decides whether Sintra is a day trip or a night.',
+    'answer_type': 'text',
+    'options': <String>[],
+    'placeholder': 'e.g. €900',
+  },
+  {
+    'id': 'pace',
+    'question': 'Packed days or slow ones?',
+    'why': 'Changes how many stops each day carries.',
+    'answer_type': 'choice',
+    'options': ['Packed', 'Slow'],
+    'placeholder': null,
+  },
+];
 
 /// Which flight a short day blames.
 ///
@@ -214,8 +240,128 @@ void _shortDayLabels() {
   });
 }
 
+/// The draft renders; the questions are a band above it.
+///
+/// A `needs_info` run used to replace the itinerary with its questions, and
+/// the partial draft the same run produced was discarded — which turned a plan
+/// the traveller could read into a form they had to fill in first.
+void _openQuestions() {
+  group('A plan the planner guessed at', () {
+    WayfareController withQuestions() => buildController(
+          plan: samplePlan(questions: _twoQuestions),
+        );
+
+    test('a draft and its questions are no longer mutually exclusive', () {
+      final controller = withQuestions();
+
+      expect(controller.hasOpenQuestions, isTrue);
+      // The whole point: there is a plan, so the questions do not take over.
+      expect(controller.hasPlan, isTrue);
+      expect(controller.needsInfo, isFalse);
+      expect(controller.showQuestionsPrompt, isTrue);
+    });
+
+    test('with nothing drafted, the questions still take the tab', () {
+      final controller = buildController(
+        plan: Plan.fromJson({
+          'status': 'needs_info',
+          'trip': <String, dynamic>{},
+          'itinerary': <dynamic>[],
+          'clarifying_questions': _twoQuestions,
+        }),
+      );
+
+      expect(controller.needsInfo, isTrue);
+      // No band: there is no plan for it to sit above.
+      expect(controller.showQuestionsPrompt, isFalse);
+    });
+
+    testWidgets('the band counts the guesses and the day still renders',
+        (tester) async {
+      await pumpTab(
+        tester,
+        TripTab(
+          controller: withQuestions(),
+          onAddActivity: (_) {},
+          onEditActivity: (_) {},
+          onRemoveActivity: (_) {},
+          onAnswerQuestions: () {},
+        ),
+        scrollable: false,
+      );
+
+      expect(find.text('TWO GUESSES'), findsOneWidget);
+      expect(find.text('The plan below rests on 2 guesses.'), findsOneWidget);
+
+      // The itinerary is on screen, which is the entire change.
+      expect(find.text('Day 1'), findsOneWidget);
+      expect(find.text('Land in Lisbon, settle into Alfama'), findsOneWidget);
+
+      // Collapsed, so the questions themselves are not spending height yet.
+      // They are built either way — the band clips them to nothing rather
+      // than rebuilding the list on every toggle — so the claim to check is
+      // the height, not the presence.
+      final collapsed = tester.getSize(find.byType(OpenQuestionsBand)).height;
+      await tester.tap(find.text('The plan below rests on 2 guesses.'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byType(OpenQuestionsBand)).height,
+        greaterThan(collapsed),
+      );
+    });
+
+    testWidgets('expanding names what was guessed and offers both ways out',
+        (tester) async {
+      var answered = false;
+      final controller = withQuestions();
+
+      await pumpTab(
+        tester,
+        TripTab(
+          controller: controller,
+          onAddActivity: (_) {},
+          onEditActivity: (_) {},
+          onRemoveActivity: (_) {},
+          onAnswerQuestions: () => answered = true,
+        ),
+        scrollable: false,
+      );
+
+      await tester.tap(find.text('The plan below rests on 2 guesses.'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('— What is the budget per person?'), findsOneWidget);
+      expect(find.text('— Packed days or slow ones?'), findsOneWidget);
+
+      await tester.tap(find.text('Answer them'));
+      expect(answered, isTrue);
+
+      // Keeping the guesses drops the band without touching the plan.
+      await tester.tap(find.text('Keep as is'));
+      await tester.pumpAndSettle();
+
+      expect(controller.questionsDismissed, isTrue);
+      expect(controller.showQuestionsPrompt, isFalse);
+      expect(find.text('TWO GUESSES'), findsNothing);
+      expect(find.text('Land in Lisbon, settle into Alfama'), findsOneWidget);
+    });
+
+    test('a new plan asks again', () {
+      final controller = withQuestions();
+      controller.dismissQuestions();
+      expect(controller.showQuestionsPrompt, isFalse);
+
+      // Re-planning replaces the questions, so the last dismissal says
+      // nothing about the new set.
+      controller.questionsDismissed = false;
+      expect(controller.showQuestionsPrompt, isTrue);
+    });
+  });
+}
+
 void main() {
   _shortDayLabels();
+  _openQuestions();
   group('Trip tab', () {
     testWidgets('renders day chips, the day total and the optional badge',
         (tester) async {
@@ -228,6 +374,7 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
+          onAnswerQuestions: () {},
         ), scrollable: false);
 
       expect(find.text('Day 1'), findsOneWidget);
@@ -252,6 +399,7 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
+          onAnswerQuestions: () {},
         ), scrollable: false);
 
       expect(find.text('Sunset drinks at Senhora do Monte'), findsNothing);
@@ -270,6 +418,7 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
+          onAnswerQuestions: () {},
         ), scrollable: false);
 
       // The morning block covers 2 of 3 travellers, so with groups on it
@@ -294,6 +443,7 @@ void main() {
           onAddActivity: (_) {},
           onEditActivity: (_) {},
           onRemoveActivity: (_) {},
+          onAnswerQuestions: () {},
         ), scrollable: false);
 
       // The banner said nothing the day itself did not already show, on a

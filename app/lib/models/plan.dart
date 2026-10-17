@@ -385,9 +385,15 @@ class Plan {
   final List<String> verifyBeforeBooking;
   final List<ClarifyingQuestion> clarifyingQuestions;
 
-  /// The spec's rule: on needs_info, show questions instead of an itinerary.
-  bool get shouldRenderItinerary =>
-      status != PlanStatus.needsInfo && itinerary.isNotEmpty;
+  /// Whether there is an itinerary to draw — and nothing else.
+  ///
+  /// `needs_info` used to suppress rendering here, on the spec's rule that
+  /// questions replace the itinerary. In practice the planner answers a
+  /// `needs_info` run with a usable partial draft *and* its questions, and
+  /// throwing the draft away turned a plan the traveller could read into a
+  /// form they had to fill in first. The questions still get asked; they are
+  /// a band above the days now, not a gate in front of them.
+  bool get shouldRenderItinerary => itinerary.isNotEmpty;
 
   String nameForMember(String id) =>
       members.where((m) => m.id == id).map((m) => m.name).firstOrNull ?? id;

@@ -132,7 +132,7 @@ void main() {
       expect(breakdown.categories.last.isOnPlan, isTrue);
     });
 
-    test('needs_info suppresses itinerary rendering', () {
+    test('needs_info with nothing drafted has no itinerary to render', () {
       final plan = Plan.fromJson({
         'conversational_summary': 'I need a few details first.',
         'status': 'needs_info',
@@ -165,6 +165,42 @@ void main() {
       expect(q.why, isNotEmpty);
       expect(q.isChoice, isFalse);
       expect(q.placeholder, isNotNull);
+    });
+
+    test('needs_info with a partial draft renders it anyway', () {
+      // The planner answers most `needs_info` runs with a usable draft *and*
+      // its questions. Suppressing the draft on the status alone threw away
+      // the readable half of the reply.
+      final plan = Plan.fromJson({
+        'conversational_summary': 'Here is a start — two things I guessed at.',
+        'status': 'needs_info',
+        'trip': <String, dynamic>{},
+        'itinerary': [
+          {
+            'day': 1,
+            'location': 'Kuala Lumpur',
+            'blocks': [
+              {
+                'time_of_day': 'morning',
+                'activity': 'Batu Caves before the heat',
+                'location': 'Gombak',
+              },
+            ],
+          },
+        ],
+        'clarifying_questions': [
+          {
+            'id': 'budget',
+            'question': 'What is the budget per person?',
+            'why': 'Decides how far the days reach.',
+            'answer_type': 'text',
+          },
+        ],
+      });
+
+      expect(plan.status, PlanStatus.needsInfo);
+      expect(plan.shouldRenderItinerary, isTrue);
+      expect(plan.clarifyingQuestions, hasLength(1));
     });
   });
 

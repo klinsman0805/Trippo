@@ -7,13 +7,14 @@ import '../../models/plan.dart';
 
 /// The planner asked instead of guessing.
 ///
-/// Renders inside the Trip tab *in place of* the itinerary, not beside it —
-/// the spec is explicit that a `needs_info` plan has no itinerary to show, and
-/// half an itinerary above a list of questions would imply otherwise.
+/// Two homes, one list of questions. With no draft behind them the questions
+/// take the Trip tab, because there is nothing else to put there. With a draft
+/// they are a screen you open from the band above the days — the plan is
+/// already readable, and these only sharpen it.
 ///
-/// Every question is skippable. That is the point of the intro copy and of the
-/// quiet second action: the group is never blocked on an answer they don't
-/// have, they just trade it for an assumption.
+/// Every question is skippable either way. That is the point of the intro copy
+/// and of the quiet second action: nobody is blocked on an answer they don't
+/// have, they just trade it for an assumption the planner states.
 class NeedsInfoView extends StatelessWidget {
   const NeedsInfoView({
     super.key,
@@ -22,9 +23,16 @@ class NeedsInfoView extends StatelessWidget {
     required this.onAnswer,
     required this.onSend,
     required this.onSkip,
+    this.hasDraft = false,
   });
 
   final List<ClarifyingQuestion> questions;
+
+  /// Whether a plan already exists behind these questions. Changes what the
+  /// screen is *for*: answering replaces a draft rather than producing a
+  /// first one, and skipping keeps what is there instead of planning on
+  /// assumptions.
+  final bool hasDraft;
 
   /// Answers so far, keyed by question id.
   final Map<String, String> answers;
@@ -56,15 +64,22 @@ class NeedsInfoView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 WayfareEyebrow(
-                  '${spellOut(total)} ${total == 1 ? 'answer' : 'answers'} needed',
+                  hasDraft
+                      ? '${spellOut(total)} ${total == 1 ? 'guess' : 'guesses'} to settle'
+                      : '${spellOut(total)} ${total == 1 ? 'answer' : 'answers'} needed',
                   color: WayfareColors.info,
                   size: 10.5,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "The planner has what you've given it so far but won't guess "
-                  'on these. Answer what you can — it will plan around anything '
-                  'you skip.',
+                  hasDraft
+                      ? 'Your plan is already built — these are the '
+                          '${total == 1 ? 'one thing' : 'things'} it had to '
+                          'guess at. Answer what you can and the planner '
+                          'rebuilds the days they affect.'
+                      : "The planner has what you've given it so far but "
+                          "won't guess on these. Answer what you can — it "
+                          'will plan around anything you skip.',
                   style: WayfareType.body(13.5, color: WayfareColors.infoBody),
                 ),
               ],
@@ -91,7 +106,9 @@ class NeedsInfoView extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           WayfareSecondaryButton(
-            label: 'Plan without these',
+            // With a draft behind it, skipping changes nothing — so the
+            // button says what it keeps, not what it would plan.
+            label: hasDraft ? 'Keep the plan as it is' : 'Plan without these',
             onPressed: onSkip,
             background: Colors.transparent,
             foreground: WayfareColors.muted,
@@ -102,8 +119,11 @@ class NeedsInfoView extends StatelessWidget {
             // Points at where the assumptions actually land — the planner's
             // reply becomes a bubble in Refine. A promise with no address is
             // one the user cannot check.
-            'Skipping is fine — the planner says what it assumed instead, '
-            'over in Refine.',
+            hasDraft
+                ? 'The plan stands either way — what it assumed is written '
+                    'out in Refine.'
+                : 'Skipping is fine — the planner says what it assumed '
+                    'instead, over in Refine.',
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 12.5,

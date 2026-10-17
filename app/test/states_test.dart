@@ -239,6 +239,29 @@ void main() {
       expect(skipped, isTrue);
     });
 
+    testWidgets('with a draft behind it, it reads as a refinement',
+        (tester) async {
+      await pump(
+        tester,
+        NeedsInfoView(
+          hasDraft: true,
+          questions: questions,
+          answers: const {},
+          onAnswer: (_, _) {},
+          onSend: () {},
+          onSkip: () {},
+        ),
+      );
+
+      // Same questions, different job: the plan exists, so nothing here is
+      // the price of seeing it.
+      expect(find.text('THREE GUESSES TO SETTLE'), findsOneWidget);
+      expect(find.textContaining('already built'), findsOneWidget);
+      // Skipping keeps a plan rather than planning without one.
+      expect(find.text('Keep the plan as it is'), findsOneWidget);
+      expect(find.text('Plan without these'), findsNothing);
+    });
+
     testWidgets('tapping the chosen chip again clears it', (tester) async {
       String? cleared;
       await pump(

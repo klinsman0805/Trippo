@@ -22,6 +22,7 @@ import 'itinerary/activity_sheets.dart';
 import 'itinerary/regenerate_sheet.dart';
 import 'needs_info.dart';
 import 'plan_failed.dart';
+import 'pushed_screen.dart';
 import 'refine_tab.dart';
 import 'sources/import_sheet.dart';
 import 'sources/sources_screen.dart';
@@ -214,8 +215,9 @@ class _WayfareShellState extends State<WayfareShell> {
       );
     }
 
-    // The planner asked rather than guessed. The questions replace the
-    // itinerary — a needs_info plan has no itinerary to show.
+    // The planner asked and produced nothing to show. Only then do the
+    // questions take the tab: when a draft came back with them, it renders
+    // and the questions sit in a band above it (see OpenQuestionsBand).
     if (_controller.tab == WayfareTab.itinerary && _controller.needsInfo) {
       return NeedsInfoView(
         questions: _controller.questions,
@@ -289,6 +291,7 @@ class _WayfareShellState extends State<WayfareShell> {
           onAddActivity: _openAddActivity,
           onEditActivity: _openEditActivity,
           onRemoveActivity: _openRemoveActivity,
+          onAnswerQuestions: _openQuestions,
         ),
       WayfareTab.budget => BudgetTab(controller: _controller),
       WayfareTab.group => GroupTab(controller: _controller),
@@ -568,6 +571,46 @@ class _WayfareShellState extends State<WayfareShell> {
       ),
     );
     if (mounted) await _controller.load();
+  }
+
+  /// The planner's outstanding questions, opened from the band above the days.
+  ///
+  /// A pushed screen rather than a sheet: answering re-plans the trip, and the
+  /// generating overlay needs somewhere to return to that is not a half-height
+  /// sheet over the plan it just replaced. Sending or keeping both pop — the
+  /// answer lands on the Trip tab either way.
+  Future<void> _openQuestions() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => WayfareTheme(
+          platform: widget.platformOverride ?? WayfareTheme.hostPlatform(),
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (ctx, _) => WayfarePushedScreen(
+              title: 'What it guessed',
+              backLabel: 'Trip',
+              subtitle: 'Answer what you can — the plan stands either way',
+              child: SingleChildScrollView(
+                child: NeedsInfoView(
+                  hasDraft: true,
+                  questions: _controller.questions,
+                  answers: _controller.answers,
+                  onAnswer: _controller.setAnswer,
+                  onSend: () {
+                    Navigator.of(ctx).pop();
+                    _controller.sendAnswers();
+                  },
+                  onSkip: () {
+                    Navigator.of(ctx).pop();
+                    _controller.dismissQuestions();
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _openSources() async {

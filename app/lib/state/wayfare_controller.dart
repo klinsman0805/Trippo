@@ -117,12 +117,38 @@ class WayfareController extends ChangeNotifier {
   /// Not a blocker — a prompt.
   bool get wouldBenefitFromTravellers => members.length < 2;
 
-  /// The planner asked questions instead of planning. The spec's rule is that
-  /// the questions replace the itinerary rather than sitting beside it.
-  bool get needsInfo =>
+  /// The planner has questions it would rather not guess at.
+  ///
+  /// Says nothing about whether it also produced a draft — [needsInfo] and
+  /// [showQuestionsPrompt] split on exactly that.
+  bool get hasOpenQuestions =>
       plan != null &&
       plan!.status == PlanStatus.needsInfo &&
       plan!.clarifyingQuestions.isNotEmpty;
+
+  /// The planner asked and has nothing to show — the only case where the
+  /// questions take the whole tab, because there is no alternative to them.
+  ///
+  /// When a draft came back alongside the questions, the draft is the screen
+  /// and the questions are an optional band above it: a plan that arrives
+  /// readable is owned by the traveller, and one that arrives as a form is
+  /// not.
+  bool get needsInfo => hasOpenQuestions && !hasPlan;
+
+  /// Whether the "two answers would help" band belongs above the days.
+  bool get showQuestionsPrompt =>
+      hasOpenQuestions && hasPlan && !questionsDismissed;
+
+  /// Set by "keep the plan as it is". Lives for the session only: the band is
+  /// a prompt, and a prompt that returns on every cold start is a nag, while
+  /// one that never returns leaves the guesses unanswerable.
+  bool questionsDismissed = false;
+
+  void dismissQuestions() {
+    if (questionsDismissed) return;
+    questionsDismissed = true;
+    notifyListeners();
+  }
 
   List<ClarifyingQuestion> get questions =>
       plan?.clarifyingQuestions ?? const [];
@@ -631,6 +657,9 @@ class WayfareController extends ChangeNotifier {
       plan = revision.plan;
       selectedDay = 1;
       updatedDay = null; // A fresh plan has no "changed by chat" day.
+      // A new plan asks its own questions, so a dismissal of the last set
+      // says nothing about this one.
+      questionsDismissed = false;
       if (clearAnswersOnSuccess) answers = {};
       conflictsMayBeStale = false;
       messages = await _api.chatThread(tripId);

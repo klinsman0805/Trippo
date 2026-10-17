@@ -150,6 +150,7 @@ Widget dayFor(WayfareController controller) => TripTab(
       onAddActivity: (_) {},
       onEditActivity: (_) {},
       onRemoveActivity: (_) {},
+      onAnswerQuestions: () {},
     );
 
 void main() {
@@ -440,10 +441,12 @@ void main() {
         ),
       );
 
-      // The named source took a whole line on every card, which made a day
-      // of saved places unreadable. The mark keeps the fact; the name is
-      // still there for anyone who cannot see the icon.
+      // The source is named on the card, not just to a screen reader. That an
+      // item resolved against something the traveller actually saved is the
+      // claim this app makes that a generated itinerary cannot, and a bare
+      // glyph made it to nobody who could see.
       expect(find.byIcon(Icons.link), findsOneWidget);
+      expect(find.text('From 吉隆坡3天2夜旅游攻略'), findsOneWidget);
       expect(
         tester.semantics
             .find(find.byIcon(Icons.link))
@@ -464,6 +467,7 @@ void main() {
       );
 
       // Added by hand to the trip's places rather than pulled out of a link.
+      expect(find.text('From a place you saved'), findsOneWidget);
       expect(
         tester.semantics.find(find.byIcon(Icons.link)).label,
         'From a place you saved',
