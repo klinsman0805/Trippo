@@ -38,6 +38,23 @@ const EnvSchema = z.object({
   /** PGlite's data folder, or `memory://` for a database that ends with the process. */
   DATABASE_PATH: z.string().default('./data/pglite'),
 
+  /**
+   * Who is asking. With SUPABASE_URL set, every /v1 request must carry a
+   * Supabase access token, verified against the project's published keys,
+   * and each trip belongs to the user who made it.
+   *
+   * Without it the server is single-user — everyone is the same local user —
+   * which is right on a laptop and refused outright in production, where it
+   * would make every trip everyone's.
+   */
+  SUPABASE_URL: z.string().url().optional(),
+  /**
+   * Only for a Supabase project still signing with a shared secret (HS256).
+   * Projects on asymmetric signing keys need nothing here: their public keys
+   * are fetched from SUPABASE_URL.
+   */
+  SUPABASE_JWT_SECRET: z.string().min(16).optional(),
+
   // Planner (Google Gemini). Without this the /plan endpoints return 503.
   // Free keys come from https://aistudio.google.com/apikey
   GEMINI_API_KEY: z.string().optional(),

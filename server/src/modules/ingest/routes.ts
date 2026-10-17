@@ -47,10 +47,10 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
     return result;
   });
 
-  app.delete<{ Params: { sourceId: string } }>(
+  app.delete<{ Params: { id: string; sourceId: string } }>(
     '/trips/:id/sources/:sourceId',
     async (req, reply) => {
-      await ingest.deleteSource(req.params.sourceId);
+      await ingest.deleteSource(req.params.id, req.params.sourceId);
       reply.code(204);
     },
   );

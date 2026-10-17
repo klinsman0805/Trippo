@@ -136,8 +136,24 @@ const MEMBER_JSON_FIELDS = new Set([
  * Changing pace or access needs alters what the planner has to reconcile, so
  * the caller is expected to surface that the conflicts are now stale.
  */
-export async function updateMember(id: string, patch: Record<string, unknown>): Promise<Member> {
-  await getMember(id); // 404s if missing
+/**
+ * A traveller on one particular trip.
+ *
+ * Children are always fetched through their trip: an id from someone else's
+ * trip then matches nothing, which is a 404 and not a leak.
+ */
+export async function getTripMember(tripId: string, id: string): Promise<Member> {
+  const row = await db.one('SELECT * FROM members WHERE id = ? AND trip_id = ?', [id, tripId]);
+  if (!row) throw notFound('member_not_found', `No member with id ${id}`);
+  return rowToMember(row);
+}
+
+export async function updateMember(
+  tripId: string,
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<Member> {
+  await getTripMember(tripId, id); // 404s if missing, or someone else's
 
   const sets: string[] = [];
   const params: Record<string, unknown> = { id };
@@ -154,8 +170,8 @@ export async function updateMember(id: string, patch: Record<string, unknown>): 
   return await getMember(id);
 }
 
-export async function deleteMember(id: string): Promise<void> {
-  const changes = await db.run('DELETE FROM members WHERE id = ?', [id]);
+export async function deleteMember(tripId: string, id: string): Promise<void> {
+  const changes = await db.run('DELETE FROM members WHERE id = ? AND trip_id = ?', [id, tripId]);
   if (changes === 0) throw notFound('member_not_found', `No member with id ${id}`);
 }
 

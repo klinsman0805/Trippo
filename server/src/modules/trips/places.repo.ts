@@ -88,8 +88,8 @@ export async function listPlaces(tripId: string): Promise<Place[]> {
   return rows.map(rowToPlace);
 }
 
-export async function deletePlace(id: string): Promise<void> {
-  const changes = await db.run('DELETE FROM places WHERE id = ?', [id]);
+export async function deletePlace(tripId: string, id: string): Promise<void> {
+  const changes = await db.run('DELETE FROM places WHERE id = ? AND trip_id = ?', [id, tripId]);
   if (changes === 0) throw notFound('place_not_found', `No place with id ${id}`);
 }
 

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { badRequest } from '../../lib/errors.js';
-import { getTrip, updateTrip } from '../trips/repo.js';
+import { getTrip, getTripMember, updateTrip } from '../trips/repo.js';
 import {
   deleteSelection,
   flightProvider,
@@ -214,6 +214,9 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
       throw badRequest('validation_error', 'Invalid selection', parsed.error.flatten());
     }
 
+    // A traveller named here must be on this trip, not merely exist.
+    if (parsed.data.member_id) await getTripMember(req.params.id, parsed.data.member_id);
+
     const selection = await saveSelection(
       req.params.id,
       parsed.data.direction,
@@ -241,10 +244,10 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
     return { selection, date_envelope: envelope };
   });
 
-  app.delete<{ Params: { selectionId: string } }>(
+  app.delete<{ Params: { id: string; selectionId: string } }>(
     '/trips/:id/flights/:selectionId',
     async (req, reply) => {
-      await deleteSelection(req.params.selectionId);
+      await deleteSelection(req.params.id, req.params.selectionId);
       reply.code(204);
     },
   );

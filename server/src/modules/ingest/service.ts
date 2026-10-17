@@ -133,7 +133,11 @@ export async function importManualText(
     opts.sourceId ??
     await createSource(tripId, { url: null, kind: content.kind, status: 'fetched' });
 
-  if (opts.sourceId) await getSource(opts.sourceId); // 404s if the id is bogus
+  // 404s for a bogus id — and for a real one on someone else's trip, which
+  // would otherwise have this text written into their import.
+  if (opts.sourceId && (await getSource(opts.sourceId)).trip_id !== tripId) {
+    throw notFound('source_not_found', `No source with id ${opts.sourceId}`);
+  }
 
   await updateSource(sourceId, {
     status: 'fetched',
@@ -239,7 +243,7 @@ export async function listSources(tripId: string): Promise<(SourceRecord & { pla
   );
 }
 
-export async function deleteSource(id: string): Promise<void> {
-  const changes = await db.run('DELETE FROM sources WHERE id = ?', [id]);
+export async function deleteSource(tripId: string, id: string): Promise<void> {
+  const changes = await db.run('DELETE FROM sources WHERE id = ? AND trip_id = ?', [id, tripId]);
   if (changes === 0) throw notFound('source_not_found', `No source with id ${id}`);
 }

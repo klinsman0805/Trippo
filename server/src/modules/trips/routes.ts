@@ -13,14 +13,11 @@ const parse = <S extends z.ZodTypeAny>(schema: S, body: unknown): z.output<S> =>
   return result.data;
 };
 
-/** Everyone is one user until sign-in lands; replaced by the request's user. */
-const LOCAL_OWNER = 'local';
-
 export async function tripRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/trips', async () => ({ trips: await repo.listTrips(LOCAL_OWNER) }));
+  app.get('/trips', async (req) => ({ trips: await repo.listTrips(req.caller.userId) }));
 
   app.post('/trips', async (req, reply) => {
-    const trip = await repo.createTrip(parse(TripInputSchema, req.body), LOCAL_OWNER);
+    const trip = await repo.createTrip(parse(TripInputSchema, req.body), req.caller.userId);
     reply.code(201);
     return { trip };
   });
@@ -51,6 +48,7 @@ export async function tripRoutes(app: FastifyInstance): Promise<void> {
     '/trips/:id/members/:memberId',
     async (req) => ({
       member: await repo.updateMember(
+        req.params.id,
         req.params.memberId,
         parse(MemberInputSchema.partial(), req.body),
       ),
@@ -63,7 +61,7 @@ export async function tripRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string; memberId: string } }>(
     '/trips/:id/members/:memberId',
     async (req, reply) => {
-      await repo.deleteMember(req.params.memberId);
+      await repo.deleteMember(req.params.id, req.params.memberId);
       reply.code(204);
     },
   );
@@ -94,10 +92,10 @@ export async function tripRoutes(app: FastifyInstance): Promise<void> {
     return { place };
   });
 
-  app.delete<{ Params: { placeId: string } }>(
+  app.delete<{ Params: { id: string; placeId: string } }>(
     '/trips/:id/places/:placeId',
     async (req, reply) => {
-      await placesRepo.deletePlace(req.params.placeId);
+      await placesRepo.deletePlace(req.params.id, req.params.placeId);
       reply.code(204);
     },
   );

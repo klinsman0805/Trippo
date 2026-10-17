@@ -123,8 +123,11 @@ export async function listSelections(tripId: string): Promise<StoredSelection[]>
   return rows.map(rowToSelection);
 }
 
-export async function deleteSelection(id: string): Promise<void> {
-  const changes = await db.run('DELETE FROM flight_selections WHERE id = ?', [id]);
+export async function deleteSelection(tripId: string, id: string): Promise<void> {
+  const changes = await db.run('DELETE FROM flight_selections WHERE id = ? AND trip_id = ?', [
+    id,
+    tripId,
+  ]);
   if (changes === 0) {
     throw notFound('selection_not_found', `No flight selection with id ${id}`);
   }
