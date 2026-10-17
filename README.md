@@ -588,6 +588,13 @@ scutil --get LocalHostName
 cd app && flutter run --dart-define=TRIPPO_API_BASE=http://YOUR-MAC-NAME.local:8080
 ```
 
+Or let the dev loop do both halves — server, hot reload and the address:
+
+```bash
+./scripts/dev.sh --phone            # the one attached phone
+./scripts/dev.sh --phone <deviceId> # one of several — `flutter devices`
+```
+
 Both sides of that are already wired: `NSAllowsLocalNetworking` in
 `ios/Runner/Info.plist` (the narrow exception — not `NSAllowsArbitraryLoads`),
 and `usesCleartextTraffic` in the **debug-only** Android manifest, so release
