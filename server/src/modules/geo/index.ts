@@ -100,5 +100,5 @@ export function proximityMatrix(
   return entries;
 }
 
-export { SAME_DAY_RADIUS_M } from './osm.js';
+export { SAME_DAY_RADIUS_M, estimateRoute, haversineMetres } from './osm.js';
 export * from './types.js';

@@ -8,6 +8,7 @@ import { ingestRoutes } from './modules/ingest/routes.js';
 import { placeRoutes } from './modules/places/routes.js';
 import { plannerRoutes } from './modules/planner/routes.js';
 import { transitRoutes } from './modules/transit/routes.js';
+import { travelRoutes } from './modules/travel/routes.js';
 import { tripRoutes } from './modules/trips/routes.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -102,6 +103,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(placeRoutes);
       await api.register(flightRoutes);
       await api.register(transitRoutes);
+      await api.register(travelRoutes);
       await api.register(plannerRoutes);
     },
     { prefix: '/v1' },

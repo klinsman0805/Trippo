@@ -140,6 +140,31 @@ const MIGRATIONS: string[] = [
     created_at         TEXT NOT NULL
   );
   `,
+
+  // 6 — durable lookups behind the travel times between activities
+  //
+  // Both caches stand in front of free community services (Photon, MOTIS)
+  // that ask to be used gently. The in-process caches already absorb repeats
+  // within a session; these absorb them across restarts, which is when a day
+  // of six activities would otherwise re-ask for every leg.
+  //
+  // `found = 0` rows are kept on purpose: "Photon has no idea what 'lunch
+  // nearby' is" is an answer worth remembering, not a reason to ask again.
+  `
+  CREATE TABLE geo_lookups (
+    query       TEXT PRIMARY KEY,               -- normalised search text
+    found       INTEGER NOT NULL,
+    lat         REAL,
+    lng         REAL,
+    created_at  TEXT NOT NULL
+  );
+
+  CREATE TABLE travel_legs (
+    key         TEXT PRIMARY KEY,               -- mode, both points, departure hour
+    result      TEXT,                           -- JSON RouteResult, null for "no route"
+    created_at  TEXT NOT NULL
+  );
+  `,
 ];
 
 function migrate(db: Database.Database): void {

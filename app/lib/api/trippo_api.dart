@@ -1,5 +1,6 @@
 import '../models/flight.dart';
 import '../models/plan.dart';
+import '../models/travel.dart';
 import '../models/trip.dart';
 import 'api_client.dart';
 
@@ -343,12 +344,33 @@ class TrippoApi {
         'mode': mode,
       });
 
-  /// Pairwise travel times between the trip's resolved places.
-  Future<Map<String, dynamic>> travelMatrix(
-    String tripId, {
-    String mode = 'TRANSIT',
-  }) =>
-      _client.get('/trips/$tripId/places/travel-matrix', query: {'mode': mode});
+  /// Travel time for each pair of consecutive activities the screen draws.
+  ///
+  /// The pairs are the client's because adjacency is: hiding optional
+  /// activities changes which cards sit next to each other. A longer timeout
+  /// than the default, since a cold day routes every leg through a free
+  /// community router that can take seconds per leg.
+  Future<({List<TravelLeg> legs, String? attribution})> travelLegs(
+    String tripId,
+    List<({String from, String to})> pairs,
+  ) async {
+    final json = await _client.post(
+      '/trips/$tripId/plan/travel',
+      body: {
+        'legs': [
+          for (final p in pairs) {'from_block_id': p.from, 'to_block_id': p.to},
+        ],
+      },
+      timeout: const Duration(seconds: 75),
+    );
+    return (
+      legs: (json['legs'] as List? ?? const [])
+          .map((l) => TravelLeg.fromJson(l as Map<String, dynamic>))
+          .toList(),
+      attribution:
+          (json['attribution'] as Map<String, dynamic>?)?['text'] as String?,
+    );
+  }
 
   // --- planner ---
 

@@ -6,6 +6,7 @@ import '../../design/tokens.dart';
 import '../../design/widgets.dart';
 import '../../models/plan.dart';
 import '../../models/flight.dart';
+import '../../models/travel.dart';
 import '../../models/trip.dart';
 import '../../state/wayfare_controller.dart';
 import 'formatting.dart';
@@ -127,6 +128,11 @@ class _TripTabState extends State<TripTab> {
 
   /// One day, scrolling on its own so the pager above it stays a fixed height.
   Widget _dayPage(BuildContext context, PlanDay day, String currency) {
+    // Pages either side are built too, so their legs are on their way before
+    // the swipe that shows them.
+    controller.ensureTravelFor(day);
+    final travel = controller.travelOn(day);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
       child: Column(
@@ -187,6 +193,19 @@ class _TripTabState extends State<TripTab> {
                   ),
                   const SizedBox(height: 10),
                 ],
+                // OSM data is ODbL: the credit goes wherever times derived
+                // from it are shown, and only there.
+                if (travel != null && controller.travelAttribution != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Travel times ${controller.travelAttribution}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: WayfareColors.mutedLight,
+                      ),
+                    ),
+                  ),
               ],
       ),
     );
@@ -219,8 +238,27 @@ class _TripTabState extends State<TripTab> {
             currency: currency,
             onEdit: onEditActivity,
             onRemove: onRemoveActivity,
+            before: (block) => _travelInto(day, block),
           ),
     ];
+  }
+
+  /// The connector above [block], or nothing where no leg can arrive.
+  Widget _travelInto(PlanDay day, PlanBlock block) {
+    final chain = controller.travelChainOn(day);
+    final i = chain.indexWhere((b) => b.id == block.id);
+    // First of the day, or `anytime`: nothing travels into it. No connector
+    // at all, rather than an empty one that would animate for no reason.
+    if (i <= 0) return const SizedBox.shrink();
+
+    final leg = controller.legInto(day, block);
+    final previous = chain[i - 1];
+    final unplacedName = switch (leg?.unplacedEnd) {
+      'from' => previous.activity,
+      'to' => block.activity,
+      _ => null,
+    };
+    return TravelConnector(leg: leg, unplacedName: unplacedName);
   }
 
   Widget _dayChips(BuildContext context, Plan plan) {
@@ -256,9 +294,17 @@ class _TripTabState extends State<TripTab> {
     final cost = day.costPerPerson(includeOptional: controller.showOptional);
     // An empty day has no cost worth stating, so the figure says how much of
     // it is written instead.
-    final right = controller.dayIsEmpty(day)
+    final money = controller.dayIsEmpty(day)
         ? '${controller.slotsFilledOn(day)} of 3 slots filled'
         : '${formatMoney(cost, currency)} pp planned';
+    // The day's travel leads, since it is the figure that says whether the
+    // day can happen; the `+` admits a leg that could not be placed, so the
+    // total is a floor rather than a promise.
+    final travel = controller.travelOn(day);
+    final right = travel == null || travel.minutes == 0
+        ? money
+        : '${formatDuration(travel.minutes)}${travel.unknown > 0 ? '+' : ''} '
+            'travel · $money';
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -394,6 +440,7 @@ class _SlotGroup extends StatelessWidget {
     required this.currency,
     required this.onEdit,
     required this.onRemove,
+    this.before,
   });
 
   final List<PlanBlock> blocks;
@@ -402,11 +449,21 @@ class _SlotGroup extends StatelessWidget {
   final ValueChanged<PlanBlock> onEdit;
   final ValueChanged<PlanBlock> onRemove;
 
+  /// What sits above a card — the travel arriving at it. Supplied rather than
+  /// worked out here, because the leg into a slot's first card starts in the
+  /// slot before it, which this group knows nothing about.
+  final Widget Function(PlanBlock block)? before;
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        for (final block in blocks)
+        for (final block in blocks) ...[
+          if (before != null)
+            KeyedSubtree(
+              key: ValueKey('before-${block.id}'),
+              child: before!(block),
+            ),
           Padding(
             key: ValueKey(block.id),
             padding: const EdgeInsets.only(bottom: WayfareSpace.cardGap),
@@ -423,9 +480,133 @@ class _SlotGroup extends StatelessWidget {
               ),
             ),
           ),
+        ],
       ],
     );
   }
+}
+
+/// The line between two activities: how long getting from one to the next
+/// takes, and on what.
+///
+/// Sits in the gap the cards already leave, so a day with travel is not a day
+/// that got taller. Arrives late — the legs are fetched after the day draws —
+/// so it grows in rather than appearing, and pushes the cards below it
+/// instead of jumping them.
+class TravelConnector extends StatelessWidget {
+  const TravelConnector({
+    super.key,
+    required this.leg,
+    this.unplacedName,
+  });
+
+  /// Null while the leg is still being worked out.
+  final TravelLeg? leg;
+
+  /// The activity that could not be placed, named so the fix is obvious: give
+  /// it a real address and the time appears.
+  final String? unplacedName;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: _content() ?? const SizedBox(width: double.infinity),
+    );
+  }
+
+  Widget? _content() {
+    final leg = this.leg;
+    if (leg == null || leg.status == LegStatus.samePlace) return null;
+
+    final unknown = leg.status == LegStatus.unplaced;
+    final long = !unknown && leg.isLongHop;
+    final color = unknown
+        ? WayfareColors.mutedLight
+        : long
+            ? WayfareColors.amberInkDeep
+            : WayfareColors.muted;
+
+    return Semantics(
+      label: _semantics(leg),
+      excludeSemantics: true,
+      child: Padding(
+        // Indented to the card's own text, so the line reads as belonging to
+        // the gap between two cards rather than as a third, smaller card.
+        padding: const EdgeInsets.fromLTRB(16, 0, 12, WayfareSpace.cardGap),
+        child: Row(
+          children: [
+            Icon(_icon(leg), size: 15, color: color),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                _label(leg),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.2,
+                  color: color,
+                  fontWeight: long ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _label(TravelLeg leg) {
+    if (leg.status == LegStatus.unplaced) {
+      final name = unplacedName?.trim() ?? '';
+      return name.isEmpty
+          ? 'Travel time unknown'
+          : "Travel time unknown — couldn't place $name";
+    }
+    return travelPhrase(leg);
+  }
+
+  String _semantics(TravelLeg leg) {
+    if (leg.status == LegStatus.unplaced) return _label(leg);
+    final phrase = travelPhrase(leg).replaceFirst('~', 'About ');
+    return leg.isLongHop ? '$phrase. A long hop.' : phrase;
+  }
+
+  static IconData _icon(TravelLeg leg) {
+    if (leg.status == LegStatus.unplaced) return Icons.more_vert;
+    return switch (leg.vehicle) {
+      Vehicle.walk => Icons.directions_walk,
+      Vehicle.train => Icons.train_outlined,
+      Vehicle.bus => Icons.directions_bus_outlined,
+      Vehicle.ferry => Icons.directions_boat_outlined,
+      Vehicle.car => Icons.directions_car_outlined,
+      Vehicle.transit || null => Icons.commute,
+    };
+  }
+}
+
+/// "12 min walk", "22 min by train · Kelana Jaya Line", "~25 min by transit".
+///
+/// The `~` is the whole of the estimate's wording, and it is never dropped:
+/// an estimate presented as a routed time is a timetable the app made up.
+String travelPhrase(TravelLeg leg) {
+  final minutes = leg.minutes ?? 0;
+  final time = minutes >= 60 ? formatDuration(minutes) : '$minutes min';
+  final approx = leg.isEstimate ? '~' : '';
+  final line = leg.line?.trim() ?? '';
+
+  final how = switch (leg.vehicle) {
+    Vehicle.walk => '$approx$time walk',
+    Vehicle.train => '$approx$time by train',
+    Vehicle.bus => '$approx$time by bus',
+    Vehicle.ferry => '$approx$time by ferry',
+    Vehicle.car => '$approx$time by car',
+    Vehicle.transit || null => '$approx$time by transit',
+  };
+  return line.isEmpty || leg.vehicle == Vehicle.walk ? how : '$how · $line';
 }
 
 /// One activity. Required cards are solid; optional ones are dashed with a

@@ -4,6 +4,7 @@ import '../api/api_client.dart';
 import '../api/trippo_api.dart';
 import '../models/flight.dart';
 import '../models/plan.dart';
+import '../models/travel.dart';
 import '../models/trip.dart';
 
 /// The four bottom tabs.
@@ -194,10 +195,129 @@ class WayfareController extends ChangeNotifier {
         : day.blocks.where((b) => !b.optional).toList();
   }
 
+  // --- travel between activities ---
+
+  /// Legs fetched so far, keyed by [_legKey].
+  final Map<String, TravelLeg> _legs = {};
+
+  /// Keys asked for and not to be asked again this session — in flight, or
+  /// failed. A failure is not retried on every rebuild, which would put a free
+  /// router on a loop; the next [load] clears it.
+  final Set<String> _legsRequested = {};
+
+  /// Credit the routing data needs, when it is OSM-derived. ODbL requires it
+  /// wherever the times are shown.
+  String? travelAttribution;
+
+  /// The activities that travel connects, in the order they are drawn.
+  ///
+  /// Morning, then afternoon, then evening — the Trip tab's own order — with
+  /// optional ones gone when hidden, because hiding one changes which cards
+  /// are next to each other. `anytime` is left out: an activity with no place
+  /// in the day has no "before" to travel from.
+  List<PlanBlock> travelChainOn(PlanDay day) {
+    final visible = visibleBlocksOn(day);
+    return [
+      for (final slot in const [
+        TimeOfDay.morning,
+        TimeOfDay.afternoon,
+        TimeOfDay.evening,
+      ])
+        ...visible.where((b) => b.timeOfDay == slot),
+    ];
+  }
+
+  /// The leg arriving at [block], once it is known.
+  ///
+  /// Null for the first activity of the day, for `anytime` ones, and while the
+  /// leg is still being worked out.
+  TravelLeg? legInto(PlanDay day, PlanBlock block) {
+    final chain = travelChainOn(day);
+    final i = chain.indexWhere((b) => b.id == block.id);
+    if (i <= 0) return null;
+    return _legs[_legKey(chain[i - 1], block)];
+  }
+
+  /// The day's travel so far, or null before any leg is known.
+  DayTravel? travelOn(PlanDay day) {
+    final chain = travelChainOn(day);
+    var minutes = 0;
+    var unknown = 0;
+    var known = 0;
+    for (var i = 1; i < chain.length; i++) {
+      final leg = _legs[_legKey(chain[i - 1], chain[i])];
+      if (leg == null) continue;
+      known++;
+      if (leg.status == LegStatus.ok) minutes += leg.minutes ?? 0;
+      if (leg.status == LegStatus.unplaced) unknown++;
+    }
+    if (known == 0) return null;
+    return DayTravel(minutes: minutes, unknown: unknown);
+  }
+
+  /// Ask for any leg on [day] not yet known or asked for.
+  ///
+  /// Safe to call from `build`: it never notifies synchronously, and a day
+  /// whose legs are all known or in flight costs a map lookup per leg.
+  void ensureTravelFor(PlanDay day) {
+    final chain = travelChainOn(day);
+    final wanted = <({String from, String to})>[];
+    final keys = <String>[];
+    for (var i = 1; i < chain.length; i++) {
+      final key = _legKey(chain[i - 1], chain[i]);
+      if (_legs.containsKey(key) || _legsRequested.contains(key)) continue;
+      wanted.add((from: chain[i - 1].id, to: chain[i].id));
+      keys.add(key);
+    }
+    if (wanted.isEmpty) return;
+    _legsRequested.addAll(keys);
+    _fetchLegs(wanted, keys);
+  }
+
+  Future<void> _fetchLegs(
+    List<({String from, String to})> pairs,
+    List<String> keys,
+  ) async {
+    try {
+      final result = await _api.travelLegs(tripId, pairs);
+      // Matched back by position as well as id: the response is in request
+      // order, and the key also carries what each block said at the time.
+      for (var i = 0; i < pairs.length && i < result.legs.length; i++) {
+        final leg = result.legs[i];
+        if (leg.fromBlockId == pairs[i].from && leg.toBlockId == pairs[i].to) {
+          _legs[keys[i]] = leg;
+        }
+      }
+      travelAttribution = result.attribution;
+      // Unlike the other requests here, nobody awaits this one, and it can
+      // outlive the trip screen: a cold day routes for tens of seconds.
+      if (!_disposed) notifyListeners();
+    } on ApiException {
+      // Travel is a nicety on top of a plan that works without it. A failure
+      // leaves the connectors out rather than putting an error on every day.
+    }
+  }
+
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  /// Identity of a leg: the two blocks *and* what they said. Editing where an
+  /// activity happens keeps its id, and must not keep its old travel time.
+  static String _legKey(PlanBlock a, PlanBlock b) =>
+      '${a.id}\u0000${a.location}\u0000${a.activity}'
+      '\u0001${b.id}\u0000${b.location}\u0000${b.activity}';
+
   int memberIndex(String id) => members.indexWhere((m) => m.id == id);
 
   Future<void> load() async {
     loading = true;
+    // Anything that failed gets another chance on a deliberate reload.
+    _legsRequested.removeWhere((key) => !_legs.containsKey(key));
     notifyListeners();
     try {
       trip = await _api.getTrip(tripId);

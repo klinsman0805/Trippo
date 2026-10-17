@@ -231,7 +231,7 @@ const titleCase = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
  * unreachable. The 1.35 factor approximates real street distance against the
  * crow-flies line.
  */
-function estimateRoute(req: RouteRequest): RouteResult {
+export function estimateRoute(req: RouteRequest): RouteResult {
   const metres = haversineMetres(req.origin, req.destination) * 1.35;
   const speedKmh = { WALK: 4.8, BICYCLE: 15, DRIVE: 28, TRANSIT: 20 }[req.mode] ?? 4.8;
 
