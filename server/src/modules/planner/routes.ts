@@ -16,6 +16,9 @@ import {
   setPinned,
   updateBlock,
 } from './blocks.js';
+import { getSource } from '../ingest/service.js';
+import { getPlace } from '../trips/places.repo.js';
+import { citeSavedPlace } from './cite.js';
 import { clearFailure, getFailure } from './failure.js';
 import { refine } from './refine.js';
 import { generatePlan, getLatestPlan, getPlan, listPlans } from './service.js';
@@ -224,15 +227,42 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
     weather_backup: z.string().max(500).nullish(),
   });
 
+  /**
+   * Adding takes a saved place as well as typed fields: `place_id` adds one of
+   * the trip's imported places — say, one the planner left out — keeping its
+   * citation. Only the id comes from the client; what the card claims about
+   * where it came from is looked up here.
+   */
+  const AddBlockBody = BlockBody.extend({
+    activity: z.string().max(200).optional(),
+    place_id: z.string().min(1).optional(),
+  });
+
   app.post<{ Params: { id: string; day: string } }>(
     '/trips/:id/plan/days/:day/blocks',
     async (req, reply) => {
       getTrip(req.params.id);
-      const parsed = BlockBody.safeParse(req.body);
+      const parsed = AddBlockBody.safeParse(req.body);
       if (!parsed.success) {
         throw badRequest('validation_error', 'Invalid activity', parsed.error.flatten());
       }
-      const plan = addBlock(req.params.id, Number(req.params.day), parsed.data);
+      const { place_id, ...input } = parsed.data;
+      if (!place_id && !input.activity?.trim()) {
+        throw badRequest('validation_error', 'An activity needs a name, or a saved place to take it from.');
+      }
+      const place = place_id ? getPlace(place_id) : null;
+      const plan = addBlock(
+        req.params.id,
+        Number(req.params.day),
+        place
+          ? citeSavedPlace(
+              input,
+              place,
+              place.source_id ? getSource(place.source_id).title : null,
+              req.params.id,
+            )
+          : input,
+      );
       reply.code(201);
       return { plan };
     },

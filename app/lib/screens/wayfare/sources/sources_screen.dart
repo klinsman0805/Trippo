@@ -147,6 +147,9 @@ class _SourcesScreenState extends State<SourcesScreen> {
         return _SourceCard(
           source: source,
           places: _places.where((p) => p.sourceId == source.id).toList(),
+          dayOf: widget.controller.plan == null
+              ? null
+              : widget.controller.dayOfPlace,
           expanded: _open == source.id,
           onToggle: () => setState(
             () => _open = _open == source.id ? null : source.id,
@@ -195,10 +198,15 @@ class _SourceCard extends StatelessWidget {
     required this.onToggle,
     required this.onRemove,
     this.onPasteText,
+    this.dayOf,
   });
 
   final TripSource source;
   final List<Place> places;
+
+  /// Which day the plan put a place on, or null when it left it out. Itself
+  /// null before there is a plan, when "not in the plan" would mean nothing.
+  final int? Function(String placeId)? dayOf;
   final bool expanded;
   final VoidCallback onToggle;
   final VoidCallback onRemove;
@@ -312,7 +320,23 @@ class _SourceCard extends StatelessWidget {
                             style: const TextStyle(fontSize: 13.5),
                           ),
                         ),
-                        if (place.category != null)
+                        if (dayOf != null)
+                          // Where it went — or that it went nowhere, which is
+                          // the thing worth seeing on this screen.
+                          Text(
+                            switch (dayOf!(place.id)) {
+                              final day? => 'Day $day',
+                              null => 'Not in the plan',
+                            },
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: dayOf!(place.id) == null
+                                  ? WayfareColors.mutedLight
+                                  : WayfareColors.accent,
+                            ),
+                          )
+                        else if (place.category != null)
                           Text(
                             categoryLabel(place.category!),
                             style: const TextStyle(

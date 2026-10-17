@@ -25,6 +25,7 @@ import 'needs_info.dart';
 import 'plan_failed.dart';
 import 'pushed_screen.dart';
 import 'refine_tab.dart';
+import 'sources/held_back_sheet.dart';
 import 'sources/import_sheet.dart';
 import 'sources/sources_screen.dart';
 import 'shell_chrome.dart';
@@ -294,6 +295,7 @@ class _WayfareShellState extends State<WayfareShell> {
           onRemoveActivity: _openRemoveActivity,
           onAnswerQuestions: _openQuestions,
           onOpenMap: _openMap,
+          onShowHeldBack: _openHeldBack,
         ),
       WayfareTab.budget => BudgetTab(controller: _controller),
       WayfareTab.group => GroupTab(controller: _controller),
@@ -628,6 +630,12 @@ class _WayfareShellState extends State<WayfareShell> {
       ),
     );
   }
+
+  /// Saved places the plan left out; any of them can go onto the day on
+  /// screen.
+  Future<void> _openHeldBack() => _sheet2(
+        HeldBackSheet(controller: _controller, day: _controller.selectedDay),
+      );
 
   Future<void> _openSources() async {
     await Navigator.of(context).push(

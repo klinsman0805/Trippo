@@ -11,6 +11,7 @@ import '../../models/trip.dart';
 import '../../state/wayfare_controller.dart';
 import 'formatting.dart';
 import 'itinerary/day_editing.dart';
+import 'sources/held_back_sheet.dart';
 // `spellOut`, shared with the questions screen so "two guesses" and "TWO
 // ANSWERS NEEDED" count the same way.
 import 'needs_info.dart';
@@ -32,6 +33,7 @@ class TripTab extends StatefulWidget {
     required this.onRemoveActivity,
     required this.onAnswerQuestions,
     this.onOpenMap,
+    this.onShowHeldBack,
   });
 
   final WayfareController controller;
@@ -46,6 +48,9 @@ class TripTab extends StatefulWidget {
 
   /// Opens the selected day on a map. Null hides the way in.
   final VoidCallback? onOpenMap;
+
+  /// Opens the saved places the plan left out. Null hides the way in.
+  final VoidCallback? onShowHeldBack;
 
   @override
   State<TripTab> createState() => _TripTabState();
@@ -214,6 +219,12 @@ class _TripTabState extends State<TripTab> {
                   ),
                   const SizedBox(height: 10),
                 ],
+                if (widget.onShowHeldBack != null &&
+                    controller.heldBackPlaces.isNotEmpty)
+                  HeldBackLine(
+                    count: controller.heldBackPlaces.length,
+                    onTap: widget.onShowHeldBack!,
+                  ),
                 // OSM data is ODbL: the credit goes wherever times derived
                 // from it are shown, and only there.
                 if (travel != null && controller.travelAttribution != null)

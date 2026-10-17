@@ -74,6 +74,10 @@ class WayfareController extends ChangeNotifier {
   /// to find out.
   int sourceCount = 0;
 
+  /// Each import's title by source id — what a saved place says it came from
+  /// before it is on any card.
+  Map<String, String> sourceTitles = const {};
+
   /// Every place those imports produced.
   ///
   /// Held here for the same reason as the count: importing eight places and
@@ -298,6 +302,42 @@ class WayfareController extends ChangeNotifier {
     }
   }
 
+  // --- saved places the plan left out ---
+
+  /// The first day citing each saved place, by place id.
+  Map<String, int> get _dayByPlace {
+    final days = <String, int>{};
+    for (final day in plan?.itinerary ?? const <PlanDay>[]) {
+      for (final block in day.blocks) {
+        final id = block.fromPlaceId;
+        if (id != null) days.putIfAbsent(id, () => day.day.toInt());
+      }
+    }
+    return days;
+  }
+
+  /// Which day a saved place is on, or null when the plan left it out.
+  int? dayOfPlace(String placeId) => _dayByPlace[placeId];
+
+  /// Saved places the plan does not use.
+  ///
+  /// They used to vanish: an import produced eleven places, the plan used
+  /// eight, and nothing said so. A plan that claims to be built from what you
+  /// saved has to show what it did not take, and let you take it anyway.
+  List<Place> get heldBackPlaces {
+    final used = _dayByPlace;
+    return importedPlaces.where((p) => !used.containsKey(p.id)).toList();
+  }
+
+  /// Put a saved place on a day, keeping its citation. The server resolves
+  /// the citation from the place itself; this only names which one.
+  Future<void> addSavedPlace(Place place, int day, TimeOfDay slot) => _editPlan(
+        () => _api.addActivity(tripId, day, {
+          'place_id': place.id,
+          'time_of_day': slot.name,
+        }),
+      );
+
   // --- where things are, for the map ---
 
   final Map<String, DayPoints> _points = {};
@@ -387,7 +427,12 @@ class WayfareController extends ChangeNotifier {
       failure = await _api.planFailure(tripId);
       answers = {};
 
-      sourceCount = (await _api.listSources(tripId)).length;
+      final sources = await _api.listSources(tripId);
+      sourceCount = sources.length;
+      sourceTitles = {
+        for (final s in sources)
+          if (s.title != null && s.title!.trim().isNotEmpty) s.id: s.title!,
+      };
       importedPlaces = sourceCount == 0 ? const [] : await _api.listPlaces(tripId);
 
       final flights = await _api.tripFlights(tripId);

@@ -413,9 +413,10 @@ export function addBlock(tripId: string, day: number, input: BlockInput): Plan {
     // to leave it alone before it is ever asked to replan.
     source: 'user',
     pinned: true,
-    // Written by hand, so it came from no import.
-    from_place_id: null,
-    from_source_title: null,
+    // Hand-written, unless it was added from a saved place — and then the
+    // citation was resolved by [citeSavedPlace], never sent by the client.
+    from_place_id: input.from_place_id ?? null,
+    from_source_title: input.from_source_title ?? null,
     from_place: null,
   });
 
