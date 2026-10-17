@@ -372,6 +372,16 @@ class TrippoApi {
     );
   }
 
+  /// Where each of one day's activities is, for the map. Same timeout as
+  /// [travelLegs]: a cold day geocodes every stop through a free service.
+  Future<DayPoints> dayPoints(String tripId, int day) async {
+    final json = await _client.get(
+      '/trips/$tripId/plan/days/$day/points',
+      timeout: const Duration(seconds: 75),
+    );
+    return DayPoints.fromJson(json);
+  }
+
   // --- planner ---
 
   /// Generate or refine the plan. [request] carries a refinement instruction

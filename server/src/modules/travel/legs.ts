@@ -98,13 +98,84 @@ export async function computeLegs(
   pairs: LegRequest[],
   deps: TravelDeps,
 ): Promise<TravelLeg[]> {
+  const locator = await createLocator(trip, plan, places, deps);
+
+  return runLimited(pairs, 2, async (pair): Promise<TravelLeg> => {
+    const from = locator.blocks.get(pair.from_block_id);
+    const to = locator.blocks.get(pair.to_block_id);
+    if (!from || !to) return unplaced(pair, !from && !to ? 'both' : !from ? 'from' : 'to');
+
+    const [a, b] = await Promise.all([
+      locator.locate(pair.from_block_id),
+      locator.locate(pair.to_block_id),
+    ]);
+    if (!a || !b) return unplaced(pair, !a && !b ? 'both' : !a ? 'from' : 'to');
+
+    const distance = haversineMetres(a, b);
+    if (distance < SAME_PLACE_M) {
+      return { ...base(pair), status: 'same_place', distance_meters: Math.round(distance) };
+    }
+
+    const mode = modeFor(distance);
+    const departure = departureFor(from.block, from.day.date, a.lng, deps.now());
+    const route = await routeOnce(mode, a, b, departure, deps);
+    return fromRoute(pair, route);
+  });
+}
+
+/** Where one activity is, as the map draws it. */
+export interface BlockPoint {
+  block_id: string;
+  /** `unplaced` stops are listed without a pin, never given a guessed one. */
+  status: 'placed' | 'unplaced';
+  lat: number | null;
+  lng: number | null;
+}
+
+/**
+ * Every activity on one day, placed or honestly not.
+ *
+ * Uses the same locator as [computeLegs], so a pin on the map and the travel
+ * time beside it can never disagree about where a stop is.
+ */
+export async function locateDay(
+  trip: Trip,
+  plan: Plan,
+  places: Place[],
+  dayNumber: number,
+  deps: TravelDeps,
+): Promise<{ points: BlockPoint[]; anchor: LatLng | null }> {
+  const day = plan.itinerary.find((d) => d.day === dayNumber);
+  if (!day) return { points: [], anchor: null };
+  const locator = await createLocator(trip, plan, places, deps);
+  const points = await runLimited(day.blocks, 2, async (block): Promise<BlockPoint> => {
+    const at = await locator.locate(block.id);
+    return at
+      ? { block_id: block.id, status: 'placed', lat: at.lat, lng: at.lng }
+      : { block_id: block.id, status: 'unplaced', lat: null, lng: null };
+  });
+  // Where to look when nothing on the day could be placed: the destination
+  // itself, rather than a map of the whole world.
+  return { points, anchor: locator.anchor };
+}
+
+/**
+ * Resolves activities to points, once each per request.
+ *
+ * A saved place uses its stored coordinates, and is geocoded and written back
+ * when it has none. Anything else is geocoded from its venue, or its title
+ * when it has no venue, biased toward the trip's destination. Whatever comes
+ * back has to land within [MAX_FROM_DESTINATION_M] of a destination or it is
+ * treated as not found.
+ */
+async function createLocator(trip: Trip, plan: Plan, places: Place[], deps: TravelDeps) {
   const blocks = new Map<string, { block: PlanBlock; day: Plan['itinerary'][number] }>();
   for (const day of plan.itinerary) {
     for (const block of day.blocks) blocks.set(block.id, { block, day });
   }
   const placesById = new Map(places.map((p) => [p.id, p]));
 
-  // One lookup per distinct query per request, however many legs share it.
+  // One lookup per distinct query per request, however many stops share it.
   const inFlight = new Map<string, Promise<LatLng | null>>();
   const geocode = (query: string, bias?: LatLng): Promise<LatLng | null> => {
     const key = normaliseQuery(query);
@@ -136,7 +207,7 @@ export async function computeLegs(
       : null;
   };
 
-  const locate = async (block: PlanBlock, dayLocation: string): Promise<LatLng | null> => {
+  const resolve = async (block: PlanBlock, dayLocation: string): Promise<LatLng | null> => {
     const place = block.from_place_id ? placesById.get(block.from_place_id) : undefined;
     if (place) {
       if (place.lat != null && place.lng != null) {
@@ -152,27 +223,21 @@ export async function computeLegs(
     return plausible(await geocode(withPlace(label, dayLocation || trip.destinations[0]), bias));
   };
 
-  return runLimited(pairs, 2, async (pair): Promise<TravelLeg> => {
-    const from = blocks.get(pair.from_block_id);
-    const to = blocks.get(pair.to_block_id);
-    if (!from || !to) return unplaced(pair, !from && !to ? 'both' : !from ? 'from' : 'to');
-
-    const [a, b] = await Promise.all([
-      locate(from.block, from.day.location),
-      locate(to.block, to.day.location),
-    ]);
-    if (!a || !b) return unplaced(pair, !a && !b ? 'both' : !a ? 'from' : 'to');
-
-    const distance = haversineMetres(a, b);
-    if (distance < SAME_PLACE_M) {
-      return { ...base(pair), status: 'same_place', distance_meters: Math.round(distance) };
-    }
-
-    const mode = modeFor(distance);
-    const departure = departureFor(from.block, from.day.date, a.lng, deps.now());
-    const route = await routeOnce(mode, a, b, departure, deps);
-    return fromRoute(pair, route);
-  });
+  const located = new Map<string, Promise<LatLng | null>>();
+  return {
+    blocks,
+    anchor: anchors[0] ?? null,
+    locate(blockId: string): Promise<LatLng | null> {
+      const entry = blocks.get(blockId);
+      if (!entry) return Promise.resolve(null);
+      let pending = located.get(blockId);
+      if (!pending) {
+        pending = resolve(entry.block, entry.day.location);
+        located.set(blockId, pending);
+      }
+      return pending;
+    },
+  };
 }
 
 // --- the rules, each small enough to test on its own ---

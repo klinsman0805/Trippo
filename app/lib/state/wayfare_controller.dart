@@ -298,6 +298,62 @@ class WayfareController extends ChangeNotifier {
     }
   }
 
+  // --- where things are, for the map ---
+
+  final Map<String, DayPoints> _points = {};
+  final Set<String> _pointsRequested = {};
+  final Set<String> _pointsFailed = {};
+
+  /// The day's points once known; null while they are being worked out.
+  DayPoints? pointsOn(PlanDay day) => _points[_dayKey(day)];
+
+  /// Whether asking for the day's points failed — the map says so and offers
+  /// to try again, rather than showing an empty map as if it were the answer.
+  bool pointsFailedOn(PlanDay day) => _pointsFailed.contains(_dayKey(day));
+
+  /// The map's list, top to bottom: the activities travel connects, in the
+  /// order they happen, then any `anytime` ones, which have no place in it.
+  List<PlanBlock> mapOrderOn(PlanDay day) {
+    final chain = travelChainOn(day);
+    return [
+      ...chain,
+      ...visibleBlocksOn(day).where((b) => b.timeOfDay == TimeOfDay.anytime),
+    ];
+  }
+
+  /// Ask for the day's points if they are not known or on their way. Like
+  /// [ensureTravelFor], never notifies synchronously, so it is safe in build.
+  void ensurePointsFor(PlanDay day) {
+    final key = _dayKey(day);
+    if (_points.containsKey(key) || _pointsRequested.contains(key)) return;
+    _pointsRequested.add(key);
+    _pointsFailed.remove(key);
+    _fetchPoints(day.day.toInt(), key);
+  }
+
+  /// After a failure: forget it and ask again.
+  void retryPointsFor(PlanDay day) {
+    _pointsRequested.remove(_dayKey(day));
+    ensurePointsFor(day);
+    notifyListeners();
+  }
+
+  Future<void> _fetchPoints(int day, String key) async {
+    try {
+      _points[key] = await _api.dayPoints(tripId, day);
+    } on ApiException {
+      _pointsFailed.add(key);
+    }
+    if (!_disposed) notifyListeners();
+  }
+
+  /// A day's identity for its points: the number and what each activity
+  /// said. Moving an activity somewhere else must move its pin.
+  static String _dayKey(PlanDay day) => [
+        '${day.day}',
+        for (final b in day.blocks) '${b.id}\u0000${b.location}\u0000${b.activity}',
+      ].join('\u0001');
+
   bool _disposed = false;
 
   @override
@@ -318,6 +374,8 @@ class WayfareController extends ChangeNotifier {
     loading = true;
     // Anything that failed gets another chance on a deliberate reload.
     _legsRequested.removeWhere((key) => !_legs.containsKey(key));
+    _pointsRequested.removeWhere((key) => !_points.containsKey(key));
+    _pointsFailed.clear();
     notifyListeners();
     try {
       trip = await _api.getTrip(tripId);

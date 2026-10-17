@@ -50,8 +50,9 @@ class ApiClient {
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, String>? query,
+    Duration? timeout,
   }) async =>
-      _send(() => _client.get(_uri(path, query)), _defaultTimeout);
+      _send(() => _client.get(_uri(path, query)), timeout ?? _defaultTimeout);
 
   /// GET a path outside the `/v1` prefix, e.g. `/health`.
   Future<Map<String, dynamic>> getUnversioned(String path) async =>

@@ -5,7 +5,7 @@ import { attribution, geoProvider, transitProvider } from '../geo/index.js';
 import { getLatestPlan } from '../planner/service.js';
 import { listPlaces, markResolved } from '../trips/places.repo.js';
 import { getTrip } from '../trips/repo.js';
-import { computeLegs } from './legs.js';
+import { computeLegs, locateDay, type TravelDeps } from './legs.js';
 import { sqliteTravelStore } from './store.js';
 
 const TravelBody = z.object({
@@ -38,21 +38,65 @@ export async function travelRoutes(app: FastifyInstance): Promise<void> {
     const record = getLatestPlan(trip.id);
     if (!record) throw notFound('no_plan_yet', 'This trip has no plan yet.');
 
-    const legs = await computeLegs(trip, record.plan, listPlaces(trip.id), parsed.data.legs, {
-      geo: geoProvider(),
-      transit: transitProvider(),
-      store: sqliteTravelStore,
-      markPlaceResolved: (place, at, address, providerId) =>
-        markResolved(place.id, {
-          lat: at.lat,
-          lng: at.lng,
-          address,
-          google_place_id: providerId,
-        }),
-      now: () => new Date(),
-      warn: (message) => req.log.warn(message),
-    });
+    const legs = await computeLegs(
+      trip,
+      record.plan,
+      listPlaces(trip.id),
+      parsed.data.legs,
+      liveDeps((message) => req.log.warn(message)),
+    );
 
     return { legs, attribution: attribution() };
   });
+
+  /**
+   * Where each of one day's activities is, for the map.
+   *
+   * Every activity on the day comes back, placed or not — the map lists the
+   * unplaced ones without a pin rather than leaving them out, so the list
+   * under the map is still the whole day.
+   */
+  app.get<{ Params: { id: string; day: string } }>(
+    '/trips/:id/plan/days/:day/points',
+    async (req) => {
+      const trip = getTrip(req.params.id);
+      const day = Number(req.params.day);
+      if (!Number.isInteger(day) || day < 1) {
+        throw badRequest('validation_error', 'Day must be a positive whole number');
+      }
+
+      const record = getLatestPlan(trip.id);
+      if (!record) throw notFound('no_plan_yet', 'This trip has no plan yet.');
+      if (!record.plan.itinerary.some((d) => d.day === day)) {
+        throw notFound('day_not_found', `This plan has no day ${day}.`);
+      }
+
+      const { points, anchor } = await locateDay(
+        trip,
+        record.plan,
+        listPlaces(trip.id),
+        day,
+        liveDeps((message) => req.log.warn(message)),
+      );
+      return { points, anchor, attribution: attribution() };
+    },
+  );
+}
+
+/** The real providers and the durable store, as both routes use them. */
+function liveDeps(warn: (message: string) => void): TravelDeps {
+  return {
+    geo: geoProvider(),
+    transit: transitProvider(),
+    store: sqliteTravelStore,
+    markPlaceResolved: (place, at, address, providerId) =>
+      markResolved(place.id, {
+        lat: at.lat,
+        lng: at.lng,
+        address,
+        google_place_id: providerId,
+      }),
+    now: () => new Date(),
+    warn,
+  };
 }

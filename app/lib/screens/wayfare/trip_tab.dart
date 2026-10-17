@@ -31,6 +31,7 @@ class TripTab extends StatefulWidget {
     required this.onEditActivity,
     required this.onRemoveActivity,
     required this.onAnswerQuestions,
+    this.onOpenMap,
   });
 
   final WayfareController controller;
@@ -42,6 +43,9 @@ class TripTab extends StatefulWidget {
 
   /// Opens the planner's outstanding questions from the band above the days.
   final VoidCallback onAnswerQuestions;
+
+  /// Opens the selected day on a map. Null hides the way in.
+  final VoidCallback? onOpenMap;
 
   @override
   State<TripTab> createState() => _TripTabState();
@@ -112,14 +116,29 @@ class _TripTabState extends State<TripTab> {
       children: [
         _dayChips(context, plan),
         Expanded(
-          child: PageView.builder(
-            controller: _pages,
-            itemCount: plan.itinerary.length,
-            // Which day is on screen is the page's to say; the chips above
-            // follow it rather than the other way round.
-            onPageChanged: (i) =>
-                controller.selectDay(plan.itinerary[i].day.toInt()),
-            itemBuilder: (context, i) => _dayPage(context, plan.itinerary[i], currency),
+          child: Stack(
+            children: [
+              PageView.builder(
+                controller: _pages,
+                itemCount: plan.itinerary.length,
+                // Which day is on screen is the page's to say; the chips
+                // above follow it rather than the other way round.
+                onPageChanged: (i) =>
+                    controller.selectDay(plan.itinerary[i].day.toInt()),
+                itemBuilder: (context, i) =>
+                    _dayPage(context, plan.itinerary[i], currency),
+              ),
+              // Over the list rather than in the header, which already holds
+              // two actions: down here it is where the thumb is, and it
+              // stays put while the day scrolls under it.
+              if (widget.onOpenMap != null && !controller.dayIsEmpty(day))
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 14,
+                  child: Center(child: MapPill(onTap: widget.onOpenMap!)),
+                ),
+            ],
           ),
         ),
       ],
@@ -134,7 +153,9 @@ class _TripTabState extends State<TripTab> {
     final travel = controller.travelOn(day);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+      // Room at the foot for the map pill, so the last card can scroll clear
+      // of it instead of ending underneath.
+      padding: EdgeInsets.fromLTRB(16, 10, 16, widget.onOpenMap == null ? 18 : 76),
       child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -482,6 +503,50 @@ class _SlotGroup extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// The way into the day's map: a dark pill floating over the list.
+class MapPill extends StatelessWidget {
+  const MapPill({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Show this day on a map',
+      excludeSemantics: true,
+      child: Material(
+        color: WayfareColors.ink,
+        shape: const StadiumBorder(),
+        elevation: 4,
+        shadowColor: const Color(0x55000000),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: const Padding(
+            padding: EdgeInsets.fromLTRB(16, 11, 18, 11),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.map_outlined, size: 18, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
+                  'Map',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

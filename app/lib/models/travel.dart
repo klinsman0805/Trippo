@@ -93,3 +93,63 @@ class DayTravel {
   /// and is worded that way.
   final int unknown;
 }
+
+/// Where one activity is, as the server placed it.
+///
+/// Mirrors `BlockPoint` in `server/src/modules/travel/legs.ts`. An unplaced
+/// activity has no coordinates at all — the map lists it without a pin rather
+/// than inventing one.
+class BlockPoint {
+  const BlockPoint({required this.blockId, this.lat, this.lng});
+
+  final String blockId;
+  final double? lat;
+  final double? lng;
+
+  bool get isPlaced => lat != null && lng != null;
+
+  factory BlockPoint.fromJson(Map<String, dynamic> json) {
+    final placed = json['status'] == 'placed';
+    return BlockPoint(
+      blockId: json['block_id'] as String? ?? '',
+      lat: placed ? (json['lat'] as num?)?.toDouble() : null,
+      lng: placed ? (json['lng'] as num?)?.toDouble() : null,
+    );
+  }
+}
+
+/// One day on the map: each activity's point, and where to look if none of
+/// them could be placed.
+class DayPoints {
+  const DayPoints({
+    required this.points,
+    this.anchorLat,
+    this.anchorLng,
+    this.attribution,
+  });
+
+  /// By block id.
+  final Map<String, BlockPoint> points;
+
+  /// The trip's destination — the view when nothing on the day has a pin.
+  final double? anchorLat;
+  final double? anchorLng;
+  final String? attribution;
+
+  bool get anyPlaced => points.values.any((p) => p.isPlaced);
+
+  factory DayPoints.fromJson(Map<String, dynamic> json) {
+    final anchor = json['anchor'] as Map<String, dynamic>?;
+    return DayPoints(
+      points: {
+        for (final p in (json['points'] as List? ?? const []))
+          if (p is Map<String, dynamic>)
+            (p['block_id'] as String? ?? ''): BlockPoint.fromJson(p),
+      },
+      anchorLat: (anchor?['lat'] as num?)?.toDouble(),
+      anchorLng: (anchor?['lng'] as num?)?.toDouble(),
+      attribution:
+          (json['attribution'] as Map<String, dynamic>?)?['text'] as String?,
+    );
+  }
+}

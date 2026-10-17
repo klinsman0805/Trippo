@@ -7,6 +7,7 @@ import {
   computeLegs,
   departureFor,
   legKey,
+  locateDay,
   modeFor,
   vehicleFor,
   withPlace,
@@ -367,5 +368,43 @@ describe('computeLegs', () => {
 
     assert.equal(leg!.status, 'unplaced');
     assert.equal(leg!.unplaced, 'to');
+  });
+});
+
+describe('locateDay', () => {
+  it('returns every activity, placed or not, in the day\'s order', async () => {
+    const plan = planOf(
+      block('a', { location: 'KLCC Park' }),
+      block('b', { location: 'Somewhere vague' }),
+      block('c', { location: 'Central Market' }),
+    );
+
+    const { points, anchor } = await locateDay(trip, plan, [], 1, deps(fakeGeo(baseTable), fakeTransit(() => null)));
+
+    assert.deepEqual(anchor, KL);
+    assert.deepEqual(points.map((p) => [p.block_id, p.status]), [
+      ['a', 'placed'],
+      ['b', 'unplaced'],
+      ['c', 'placed'],
+    ]);
+    assert.equal(points[0]!.lat, KLCC.lat);
+    // Unplaced means no coordinates at all — not a guess at the city centre.
+    assert.equal(points[1]!.lat, null);
+  });
+
+  it('agrees with the travel times about where a stop is', async () => {
+    // A pin on the map and the leg beside it come from one locator, so the
+    // namesake abroad that the leg refuses is refused on the map too.
+    const plan = planOf(block('a', { location: 'KLCC Park' }), block('b', { location: 'Fuji Ramen' }));
+    const geo = fakeGeo({ ...baseTable, 'fuji ramen, kuala lumpur': FUJI });
+
+    const { points } = await locateDay(trip, plan, [], 1, deps(geo, fakeTransit(() => null)));
+
+    assert.equal(points[1]!.status, 'unplaced');
+  });
+
+  it('a day the plan does not have is empty, not an error', async () => {
+    const { points } = await locateDay(trip, planOf(block('a')), [], 9, deps(fakeGeo(baseTable), fakeTransit(() => null)));
+    assert.deepEqual(points, []);
   });
 });

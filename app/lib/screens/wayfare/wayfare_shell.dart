@@ -19,6 +19,7 @@ import 'formatting.dart';
 import 'group_tab.dart';
 import 'itinerary/activity_sheet.dart';
 import 'itinerary/activity_sheets.dart';
+import 'itinerary/day_map_screen.dart';
 import 'itinerary/regenerate_sheet.dart';
 import 'needs_info.dart';
 import 'plan_failed.dart';
@@ -292,6 +293,7 @@ class _WayfareShellState extends State<WayfareShell> {
           onEditActivity: _openEditActivity,
           onRemoveActivity: _openRemoveActivity,
           onAnswerQuestions: _openQuestions,
+          onOpenMap: _openMap,
         ),
       WayfareTab.budget => BudgetTab(controller: _controller),
       WayfareTab.group => GroupTab(controller: _controller),
@@ -608,6 +610,20 @@ class _WayfareShellState extends State<WayfareShell> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// The selected day on a map. Day changes made there carry back: the Trip
+  /// tab follows the controller's selected day, so it opens where the map
+  /// left off.
+  Future<void> _openMap() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => WayfareTheme(
+          platform: widget.platformOverride ?? WayfareTheme.hostPlatform(),
+          child: DayMapScreen(controller: _controller),
         ),
       ),
     );
