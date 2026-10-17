@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api/api_client.dart';
+import 'auth/session.dart';
 import 'api/trippo_api.dart';
 import 'config.dart';
 import 'design/theme.dart';
@@ -8,8 +9,16 @@ import 'screens/trip_list_screen.dart';
 import 'screens/wayfare/flights/flights_screen.dart';
 import 'screens/wayfare/wayfare_shell.dart';
 
-void main() {
-  final api = TrippoApi(ApiClient(baseUrl: AppConfig.apiBaseUrl));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final session = await AppSession.start();
+  final api = TrippoApi(
+    ApiClient(
+      baseUrl: AppConfig.apiBaseUrl,
+      accessToken: session?.accessToken,
+      refreshSession: session?.refresh,
+    ),
+  );
   runApp(TrippoApp(api: api));
 }
 

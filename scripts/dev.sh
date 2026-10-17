@@ -12,6 +12,10 @@
 # over plain HTTP where it would refuse a raw LAN IP. Set TRIPPO_API_BASE to
 # point anywhere else.
 #
+# Sign-in is off unless SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are set in
+# the environment; then the app signs in anonymously against that project.
+# The server needs SUPABASE_URL in server/.env to check those tokens.
+#
 # The server already reloads itself (tsx watch). The app does not: `flutter
 # run` reloads when you press `r` in its terminal, which means every change
 # costs a context switch. Flutter also reloads on SIGUSR1 when given a pid
@@ -97,6 +101,11 @@ args=(--pid-file "$pidfile")
 if [ -n "$api_base" ]; then
   args+=(--dart-define="TRIPPO_API_BASE=$api_base")
   echo "→ app talks to $api_base"
+fi
+if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_PUBLISHABLE_KEY:-}" ]; then
+  args+=(--dart-define="SUPABASE_URL=$SUPABASE_URL")
+  args+=(--dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY")
+  echo "→ app signs in with $SUPABASE_URL"
 fi
 
 echo "→ flutter run — press R to restart, q to quit (r is automatic)"

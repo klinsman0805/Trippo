@@ -29,18 +29,33 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  ApiClient({required this.baseUrl, http.Client? client})
-      : _client = client ?? http.Client();
+  ApiClient({
+    required this.baseUrl,
+    http.Client? client,
+    this.accessToken,
+    this.refreshSession,
+  }) : _client = client ?? http.Client();
 
   /// e.g. `http://10.0.2.2:8080` on the Android emulator, since `localhost`
   /// there refers to the emulator itself, not the host machine.
   final String baseUrl;
   final http.Client _client;
 
+  /// The signed-in session's token, sent on every request. Null against a
+  /// local server with no sign-in, which accepts requests without one.
+  final Future<String?> Function()? accessToken;
+
+  /// Called once when the server answers 401, before the request is retried:
+  /// a token that expired while the app sat in the background is the usual
+  /// cause, and a refresh is the whole fix.
+  final Future<void> Function()? refreshSession;
+
   /// Planner calls run for minutes with adaptive thinking, so the default
   /// client timeout is far too aggressive for them — see [postLongRunning].
   static const Duration _defaultTimeout = Duration(seconds: 30);
   static const Duration _plannerTimeout = Duration(minutes: 8);
+
+  static const _json = {'content-type': 'application/json'};
 
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse('$baseUrl/v1$path').replace(
@@ -52,11 +67,16 @@ class ApiClient {
     Map<String, String>? query,
     Duration? timeout,
   }) async =>
-      _send(() => _client.get(_uri(path, query)), timeout ?? _defaultTimeout);
+      _send(
+        (headers) => _client.get(_uri(path, query), headers: headers),
+        timeout ?? _defaultTimeout,
+      );
 
   /// GET a path outside the `/v1` prefix, e.g. `/health`.
-  Future<Map<String, dynamic>> getUnversioned(String path) async =>
-      _send(() => _client.get(Uri.parse('$baseUrl$path')), _defaultTimeout);
+  Future<Map<String, dynamic>> getUnversioned(String path) async => _send(
+        (headers) => _client.get(Uri.parse('$baseUrl$path'), headers: headers),
+        _defaultTimeout,
+      );
 
   Future<Map<String, dynamic>> post(
     String path, {
@@ -64,9 +84,9 @@ class ApiClient {
     Duration? timeout,
   }) async =>
       _send(
-        () => _client.post(
+        (headers) => _client.post(
           _uri(path),
-          headers: const {'content-type': 'application/json'},
+          headers: {...headers, ..._json},
           body: jsonEncode(body ?? const {}),
         ),
         timeout ?? _defaultTimeout,
@@ -77,30 +97,41 @@ class ApiClient {
       post(path, body: body, timeout: _plannerTimeout);
 
   Future<Map<String, dynamic>> patch(String path, {Object? body}) async => _send(
-        () => _client.patch(
+        (headers) => _client.patch(
           _uri(path),
-          headers: const {'content-type': 'application/json'},
+          headers: {...headers, ..._json},
           body: jsonEncode(body ?? const {}),
         ),
         _defaultTimeout,
       );
 
   Future<void> delete(String path) async {
-    await _send(() => _client.delete(_uri(path)), _defaultTimeout);
+    await _send(
+      (headers) => _client.delete(_uri(path), headers: headers),
+      _defaultTimeout,
+    );
   }
 
   /// DELETE where the response body matters — removing an activity returns the
   /// updated plan, so the client does not have to refetch it.
-  Future<Map<String, dynamic>> deleteReturning(String path) =>
-      _send(() => _client.delete(_uri(path)), _defaultTimeout);
+  Future<Map<String, dynamic>> deleteReturning(String path) => _send(
+        (headers) => _client.delete(_uri(path), headers: headers),
+        _defaultTimeout,
+      );
+
+  Future<Map<String, String>> _authHeaders() async {
+    final token = await accessToken?.call();
+    return token == null ? const {} : {'authorization': 'Bearer $token'};
+  }
 
   Future<Map<String, dynamic>> _send(
-    Future<http.Response> Function() request,
-    Duration timeout,
-  ) async {
+    Future<http.Response> Function(Map<String, String> headers) request,
+    Duration timeout, {
+    bool retried = false,
+  }) async {
     late http.Response response;
     try {
-      response = await request().timeout(timeout);
+      response = await request(await _authHeaders()).timeout(timeout);
     } on SocketException catch (e) {
       throw ApiException(
         statusCode: 0,
@@ -120,6 +151,13 @@ class ApiClient {
                 'It may still be working — reopen the trip in a moment to see.'
             : 'The server did not answer within ${timeout.inSeconds} seconds.',
       );
+    }
+
+    // Once, and only with a session to refresh: a second 401 is a real
+    // refusal, and retrying it would loop.
+    if (response.statusCode == 401 && !retried && refreshSession != null) {
+      await refreshSession!();
+      return _send(request, timeout, retried: true);
     }
 
     // Status is judged before the body, because a failure with an empty body
