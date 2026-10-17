@@ -1,0 +1,20 @@
+# What `gcloud run deploy --source server` must not upload.
+#
+# gcloud looks for this file in the upload root — this folder — and consults
+# neither the repository's .gitignore (a level up, outside the root) nor
+# .dockerignore (which applies to the build context, after the upload). So
+# everything excluded has to be listed here too, not only there.
+#
+# data/ is the reason this file exists: PGlite writes its local database with
+# 1970 timestamps, and a source upload is a ZIP, whose format cannot carry a
+# date before 1980. With the folder present the deploy dies on
+# "ZIP does not support timestamps before 1980" partway through uploading.
+# The deployed server never reads it — it reaches Postgres over DATABASE_URL —
+# so it has no business in the image either way.
+
+node_modules/
+dist/
+data/
+.env
+.env.*
+*.log
