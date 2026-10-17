@@ -124,10 +124,10 @@ function memoryStore(): TravelStore {
   const geo = new Map<string, LatLng | null>();
   const legs = new Map<string, RouteResult | null>();
   return {
-    getGeo: (q) => (geo.has(q) ? geo.get(q)! : undefined),
-    putGeo: (q, at) => void geo.set(q, at),
-    getLeg: (k) => (legs.has(k) ? legs.get(k)! : undefined),
-    putLeg: (k, r) => void legs.set(k, r),
+    getGeo: async (q) => (geo.has(q) ? geo.get(q)! : undefined),
+    putGeo: async (q, at) => void geo.set(q, at),
+    getLeg: async (k) => (legs.has(k) ? legs.get(k)! : undefined),
+    putLeg: async (k, r) => void legs.set(k, r),
   };
 }
 
@@ -150,7 +150,7 @@ function deps(geo: GeoProvider, transit: TransitProvider, over: Partial<TravelDe
     geo,
     transit,
     store: memoryStore(),
-    markPlaceResolved: () => {},
+    markPlaceResolved: async () => {},
     now: () => new Date('2026-10-17T03:00:00Z'), // a Saturday
     ...over,
   };
@@ -313,7 +313,7 @@ describe('computeLegs', () => {
     const written: LatLng[] = [];
 
     await computeLegs(trip, plan, [place], [{ from_block_id: 'a', to_block_id: 'b' }], deps(fakeGeo(baseTable), fakeTransit(() => train(20)), {
-      markPlaceResolved: (_p, at) => void written.push(at),
+      markPlaceResolved: async (_p, at) => void written.push(at),
     }));
 
     assert.deepEqual(written, [CENTRAL_MARKET]);

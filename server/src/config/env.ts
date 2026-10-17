@@ -24,7 +24,19 @@ const EnvSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
-  DATABASE_PATH: z.string().default('./data/trippo.db'),
+  /**
+   * Supabase's Postgres, as the pooler's connection string (port 6543). When
+   * unset the server runs on PGlite at [DATABASE_PATH] instead — no database
+   * server, no account — which is the right default for a laptop.
+   */
+  DATABASE_URL: z.string().url().optional(),
+  /**
+   * Connections per instance. Small on purpose: Cloud Run may run several
+   * instances, and Supabase's free pooler serves a few dozen in all.
+   */
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().default(4),
+  /** PGlite's data folder, or `memory://` for a database that ends with the process. */
+  DATABASE_PATH: z.string().default('./data/pglite'),
 
   // Planner (Google Gemini). Without this the /plan endpoints return 503.
   // Free keys come from https://aistudio.google.com/apikey

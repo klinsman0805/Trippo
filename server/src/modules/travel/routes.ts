@@ -6,7 +6,7 @@ import { getLatestPlan } from '../planner/service.js';
 import { listPlaces, markResolved } from '../trips/places.repo.js';
 import { getTrip } from '../trips/repo.js';
 import { computeLegs, locateDay, type TravelDeps } from './legs.js';
-import { sqliteTravelStore } from './store.js';
+import { travelStore } from './store.js';
 
 const TravelBody = z.object({
   /**
@@ -29,19 +29,19 @@ export async function travelRoutes(app: FastifyInstance): Promise<void> {
    * the screen knows that.
    */
   app.post<{ Params: { id: string } }>('/trips/:id/plan/travel', async (req) => {
-    const trip = getTrip(req.params.id);
+    const trip = await getTrip(req.params.id);
     const parsed = TravelBody.safeParse(req.body ?? {});
     if (!parsed.success) {
       throw badRequest('validation_error', 'Expected { legs: [{ from_block_id, to_block_id }] }', parsed.error.flatten());
     }
 
-    const record = getLatestPlan(trip.id);
+    const record = await getLatestPlan(trip.id);
     if (!record) throw notFound('no_plan_yet', 'This trip has no plan yet.');
 
     const legs = await computeLegs(
       trip,
       record.plan,
-      listPlaces(trip.id),
+      await listPlaces(trip.id),
       parsed.data.legs,
       liveDeps((message) => req.log.warn(message)),
     );
@@ -59,13 +59,13 @@ export async function travelRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string; day: string } }>(
     '/trips/:id/plan/days/:day/points',
     async (req) => {
-      const trip = getTrip(req.params.id);
+      const trip = await getTrip(req.params.id);
       const day = Number(req.params.day);
       if (!Number.isInteger(day) || day < 1) {
         throw badRequest('validation_error', 'Day must be a positive whole number');
       }
 
-      const record = getLatestPlan(trip.id);
+      const record = await getLatestPlan(trip.id);
       if (!record) throw notFound('no_plan_yet', 'This trip has no plan yet.');
       if (!record.plan.itinerary.some((d) => d.day === day)) {
         throw notFound('day_not_found', `This plan has no day ${day}.`);
@@ -74,7 +74,7 @@ export async function travelRoutes(app: FastifyInstance): Promise<void> {
       const { points, anchor } = await locateDay(
         trip,
         record.plan,
-        listPlaces(trip.id),
+        await listPlaces(trip.id),
         day,
         liveDeps((message) => req.log.warn(message)),
       );
@@ -88,7 +88,7 @@ function liveDeps(warn: (message: string) => void): TravelDeps {
   return {
     geo: geoProvider(),
     transit: transitProvider(),
-    store: sqliteTravelStore,
+    store: travelStore,
     markPlaceResolved: (place, at, address, providerId) =>
       markResolved(place.id, {
         lat: at.lat,

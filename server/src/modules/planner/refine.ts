@@ -43,7 +43,7 @@ export async function refine(
   message: string,
   opts: { pendingSourceId?: string | null } = {},
 ): Promise<RefineResult> {
-  const trip = getTrip(tripId);
+  const trip = await getTrip(tripId);
   const text = message.trim();
   if (!text) throw badRequest('empty_message', 'Say something to refine the plan.');
 
@@ -89,7 +89,7 @@ export async function refine(
 
   // Not a link — a planning instruction. Mention unused imports so places the
   // group saved don't quietly sit there never making it into a plan.
-  const request = withUnusedPlacesNote(tripId, text);
+  const request = await withUnusedPlacesNote(tripId, text);
   const plan = await generatePlan(tripId, request);
 
   return {
@@ -134,9 +134,9 @@ function describeImport(result: ImportResult): string {
  * Append a note listing saved places the current plan hasn't used, so a
  * "work them in" reply actually has something concrete to act on.
  */
-function withUnusedPlacesNote(tripId: string, request: string): string {
-  const latest = getLatestPlan(tripId);
-  const places = listPlaces(tripId);
+async function withUnusedPlacesNote(tripId: string, request: string): Promise<string> {
+  const latest = await getLatestPlan(tripId);
+  const places = await listPlaces(tripId);
   if (places.length === 0) return request;
 
   const used = new Set<string>();

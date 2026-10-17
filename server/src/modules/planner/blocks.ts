@@ -50,11 +50,11 @@ export function ensureBlockIds(plan: Plan): boolean {
  * one would — the flight envelope stays the only thing that decides how long a
  * trip is, whoever fills it in.
  */
-export function createBlankPlan(tripId: string): PlanRecord {
-  const existing = getLatestPlan(tripId);
+export async function createBlankPlan(tripId: string): Promise<PlanRecord> {
+  const existing = await getLatestPlan(tripId);
   if (existing) return existing;
 
-  const trip = getTrip(tripId);
+  const trip = await getTrip(tripId);
   const days = daysBetween(trip.start_date, trip.end_date);
 
   const plan: Plan = {
@@ -96,12 +96,13 @@ export function createBlankPlan(tripId: string): PlanRecord {
   };
 
   const id = newId('plan');
-  db.prepare(
+  await db.run(
     `INSERT INTO plans (id, trip_id, revision, status, summary, plan, model, user_request, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, tripId, 1, 'complete', '', JSON.stringify(plan), 'hand-written', null, nowIso());
+    [id, tripId, 1, 'complete', '', JSON.stringify(plan), 'hand-written', null, nowIso()],
+  );
 
-  return getLatestPlan(tripId)!;
+  return (await getLatestPlan(tripId))!;
 }
 
 /**
@@ -111,18 +112,18 @@ export function createBlankPlan(tripId: string): PlanRecord {
  * the itinerary alone would leave the trip's dates a day short, and the next
  * reconcile would take it straight back off.
  */
-export function addDay(tripId: string): Plan {
-  const record = loadPlan(tripId);
+export async function addDay(tripId: string): Promise<Plan> {
+  const record = await loadPlan(tripId);
   const plan = record.plan;
   ensureBlockIds(plan);
 
-  const trip = getTrip(tripId);
+  const trip = await getTrip(tripId);
   let date: string | null = null;
 
   if (trip.start_date && trip.end_date) {
     const end = Date.parse(`${trip.end_date}T00:00:00Z`) + 86_400_000;
     date = new Date(end).toISOString().slice(0, 10);
-    updateTrip(tripId, { end_date: date });
+    await updateTrip(tripId, { end_date: date });
     plan.trip.end_date = date;
   }
 
@@ -152,8 +153,8 @@ export function addDay(tripId: string): Plan {
  * Which end moves follows from which day goes: drop the first and the trip
  * starts a day later; drop the last and the return comes a day earlier.
  */
-export function deleteDay(tripId: string, day: number): Plan {
-  const record = loadPlan(tripId);
+export async function deleteDay(tripId: string, day: number): Promise<Plan> {
+  const record = await loadPlan(tripId);
   const plan = record.plan;
   ensureBlockIds(plan);
 
@@ -177,16 +178,16 @@ export function deleteDay(tripId: string, day: number): Plan {
   const removingFirst = day === first;
   plan.itinerary = plan.itinerary.filter((d) => d.day !== day);
 
-  const trip = getTrip(tripId);
+  const trip = await getTrip(tripId);
   if (trip.start_date && trip.end_date) {
     let { start_date: start, end_date: end } = trip;
     if (removingFirst) {
       start = shiftDate(start, 1);
-      updateTrip(tripId, { start_date: start });
+      await updateTrip(tripId, { start_date: start });
       plan.trip.start_date = start;
     } else {
       end = shiftDate(end, -1);
-      updateTrip(tripId, { end_date: end });
+      await updateTrip(tripId, { end_date: end });
       plan.trip.end_date = end;
     }
 
@@ -221,11 +222,11 @@ const shiftDate = (iso: string, days: number): string =>
  * Returns null when nothing needed doing, so callers can avoid a pointless
  * write.
  */
-export function reconcileDays(tripId: string): Plan | null {
-  const record = getLatestPlan(tripId);
+export async function reconcileDays(tripId: string): Promise<Plan | null> {
+  const record = await getLatestPlan(tripId);
   if (!record) return null;
 
-  const trip = getTrip(tripId);
+  const trip = await getTrip(tripId);
   const dates = daysBetween(trip.start_date, trip.end_date);
   const plan = record.plan;
   ensureBlockIds(plan);
@@ -346,8 +347,8 @@ function daysBetween(start: string | null, end: string | null): (string | null)[
   return out;
 }
 
-function loadPlan(tripId: string): PlanRecord {
-  const record = getLatestPlan(tripId);
+async function loadPlan(tripId: string): Promise<PlanRecord> {
+  const record = await getLatestPlan(tripId);
   if (!record) {
     throw notFound(
       'no_plan_yet',
@@ -357,13 +358,13 @@ function loadPlan(tripId: string): PlanRecord {
   return record;
 }
 
-function persist(record: PlanRecord, plan: Plan): Plan {
+async function persist(record: PlanRecord, plan: Plan): Promise<Plan> {
   recomputeCosts(plan);
-  db.prepare('UPDATE plans SET plan = ?, status = ? WHERE id = ?').run(
+  await db.run('UPDATE plans SET plan = ?, status = ? WHERE id = ?', [
     JSON.stringify(plan),
     plan.status,
     record.id,
-  );
+  ]);
   return plan;
 }
 
@@ -384,8 +385,8 @@ function recomputeCosts(plan: Plan): void {
   plan.trip.over_budget = budget !== null && plan.trip.estimated_total_cost > budget;
 }
 
-export function addBlock(tripId: string, day: number, input: BlockInput): Plan {
-  const record = loadPlan(tripId);
+export async function addBlock(tripId: string, day: number, input: BlockInput): Promise<Plan> {
+  const record = await loadPlan(tripId);
   const plan = record.plan;
   ensureBlockIds(plan);
 
@@ -425,8 +426,8 @@ export function addBlock(tripId: string, day: number, input: BlockInput): Plan {
   return persist(record, plan);
 }
 
-export function updateBlock(tripId: string, blockId: string, input: BlockInput): Plan {
-  const record = loadPlan(tripId);
+export async function updateBlock(tripId: string, blockId: string, input: BlockInput): Promise<Plan> {
+  const record = await loadPlan(tripId);
   const plan = record.plan;
   ensureBlockIds(plan);
 
@@ -452,8 +453,8 @@ export function updateBlock(tripId: string, blockId: string, input: BlockInput):
   return persist(record, plan);
 }
 
-export function removeBlock(tripId: string, blockId: string): Plan {
-  const record = loadPlan(tripId);
+export async function removeBlock(tripId: string, blockId: string): Promise<Plan> {
+  const record = await loadPlan(tripId);
   const plan = record.plan;
   ensureBlockIds(plan);
 
@@ -468,13 +469,13 @@ export function removeBlock(tripId: string, blockId: string): Plan {
   return persist(record, plan);
 }
 
-export function moveBlock(
+export async function moveBlock(
   tripId: string,
   blockId: string,
   targetDay: number,
   targetSlot: PlanBlock['time_of_day'],
-): Plan {
-  const record = loadPlan(tripId);
+): Promise<Plan> {
+  const record = await loadPlan(tripId);
   const plan = record.plan;
   ensureBlockIds(plan);
 
@@ -498,8 +499,8 @@ export function moveBlock(
 }
 
 /** Hand the block back to the planner without pretending it was never yours. */
-export function setPinned(tripId: string, blockId: string, pinned: boolean): Plan {
-  const record = loadPlan(tripId);
+export async function setPinned(tripId: string, blockId: string, pinned: boolean): Promise<Plan> {
+  const record = await loadPlan(tripId);
   const plan = record.plan;
   ensureBlockIds(plan);
 
@@ -563,8 +564,8 @@ export function applyTimeOrder(blocks: PlanBlock[], slot: PlanBlock['time_of_day
  * within the day, so the client never has to reason about the day's whole
  * array.
  */
-export function reorderBlock(tripId: string, blockId: string, toIndex: number): Plan {
-  const record = loadPlan(tripId);
+export async function reorderBlock(tripId: string, blockId: string, toIndex: number): Promise<Plan> {
+  const record = await loadPlan(tripId);
   const plan = record.plan;
   ensureBlockIds(plan);
 
@@ -603,8 +604,8 @@ export interface PinnedSummary {
   committed_cost: number;
 }
 
-export function pinnedSummary(tripId: string): PinnedSummary {
-  const record = getLatestPlan(tripId);
+export async function pinnedSummary(tripId: string): Promise<PinnedSummary> {
+  const record = await getLatestPlan(tripId);
   if (!record) return { pinned: [], replan_days: [], committed_cost: 0 };
 
   const plan = record.plan;

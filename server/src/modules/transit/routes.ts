@@ -96,10 +96,10 @@ export async function transitRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
     '/trips/:id/places/proximity',
     async (req) => {
-      getTrip(req.params.id);
+      await getTrip(req.params.id);
 
       const limit = Math.min(Number(req.query.limit ?? 50) || 50, 50);
-      const places = listPlaces(req.params.id)
+      const places = (await listPlaces(req.params.id))
         .filter((p) => p.resolved && p.lat != null && p.lng != null)
         .slice(0, limit);
 

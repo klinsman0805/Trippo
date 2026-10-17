@@ -39,7 +39,7 @@ export async function placeRoutes(app: FastifyInstance): Promise<void> {
    * not stampeding a free service.
    */
   app.post<{ Params: { id: string } }>('/trips/:id/places/resolve', async (req) => {
-    const trip = getTrip(req.params.id);
+    const trip = await getTrip(req.params.id);
     const parsed = ResolveBody.safeParse(req.body ?? {});
     if (!parsed.success) {
       throw badRequest('validation_error', 'Invalid body', parsed.error.flatten());
@@ -47,7 +47,7 @@ export async function placeRoutes(app: FastifyInstance): Promise<void> {
 
     const provider = geoProvider();
     const wanted = parsed.data.place_ids ? new Set(parsed.data.place_ids) : null;
-    const targets = listPlaces(trip.id).filter(
+    const targets = (await listPlaces(trip.id)).filter(
       (p) => (wanted ? wanted.has(p.id) : !p.resolved),
     );
 
@@ -70,7 +70,7 @@ export async function placeRoutes(app: FastifyInstance): Promise<void> {
           continue;
         }
         resolved.push(
-          markResolved(place.id, {
+          await markResolved(place.id, {
             lat: match.lat,
             lng: match.lng,
             address: match.address,

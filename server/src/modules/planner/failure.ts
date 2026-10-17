@@ -32,7 +32,7 @@ export interface PlanFailure {
   at: string;
 }
 
-export function recordFailure(
+export async function recordFailure(
   tripId: string,
   err: unknown,
   opts: {
@@ -40,11 +40,11 @@ export function recordFailure(
     lastGoodRevision: number | null;
     userRequest: string | null;
   },
-): void {
+): Promise<void> {
   const code = err instanceof AppError ? err.code : 'unknown';
   const detail = err instanceof Error ? err.message : String(err);
 
-  db.prepare(
+  await db.run(
     `INSERT INTO plan_failures
        (trip_id, reason_code, detail, elapsed_ms, last_good_revision, user_request, created_at)
      VALUES (@trip_id, @reason_code, @detail, @elapsed_ms, @last_good_revision, @user_request, @created_at)
@@ -55,7 +55,7 @@ export function recordFailure(
        last_good_revision = excluded.last_good_revision,
        user_request = excluded.user_request,
        created_at = excluded.created_at`,
-  ).run({
+    {
     trip_id: tripId,
     reason_code: code,
     detail,
@@ -63,18 +63,17 @@ export function recordFailure(
     last_good_revision: opts.lastGoodRevision,
     user_request: opts.userRequest,
     created_at: nowIso(),
-  });
+    },
+  );
 }
 
 /** Called after a revision lands — the failure is no longer the current state. */
-export function clearFailure(tripId: string): void {
-  db.prepare('DELETE FROM plan_failures WHERE trip_id = ?').run(tripId);
+export async function clearFailure(tripId: string): Promise<void> {
+  await db.run('DELETE FROM plan_failures WHERE trip_id = ?', [tripId]);
 }
 
-export function getFailure(tripId: string): PlanFailure | null {
-  const row = db.prepare('SELECT * FROM plan_failures WHERE trip_id = ?').get(tripId) as
-    | Record<string, unknown>
-    | undefined;
+export async function getFailure(tripId: string): Promise<PlanFailure | null> {
+  const row = await db.one('SELECT * FROM plan_failures WHERE trip_id = ?', [tripId]);
   if (!row) return null;
 
   const revision = (row.last_good_revision as number) ?? null;
@@ -87,7 +86,7 @@ export function getFailure(tripId: string): PlanFailure | null {
     detail: (row.detail as string) ?? null,
     elapsed_ms: elapsed,
     last_good_revision: revision,
-    last_good_days: revision === null ? null : daysInRevision(tripId, revision),
+    last_good_days: revision === null ? null : await daysInRevision(tripId, revision),
     user_request: (row.user_request as string) ?? null,
     at: row.created_at as string,
   };
@@ -153,10 +152,11 @@ export function formatElapsed(ms: number): string {
   return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
 }
 
-function daysInRevision(tripId: string, revision: number): number | null {
-  const row = db
-    .prepare('SELECT plan FROM plans WHERE trip_id = ? AND revision = ?')
-    .get(tripId, revision) as { plan?: string } | undefined;
+async function daysInRevision(tripId: string, revision: number): Promise<number | null> {
+  const row = await db.one<{ plan?: string }>(
+    'SELECT plan FROM plans WHERE trip_id = ? AND revision = ?',
+    [tripId, revision],
+  );
   if (!row?.plan) return null;
   try {
     const parsed = JSON.parse(row.plan) as { itinerary?: unknown[] };

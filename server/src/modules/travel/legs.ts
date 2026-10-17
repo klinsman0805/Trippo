@@ -71,17 +71,17 @@ export interface TravelDeps {
   transit: TransitProvider;
   store: TravelStore;
   /** Persist a geocode onto a saved place, so it is only ever looked up once. */
-  markPlaceResolved(place: Place, at: LatLng, address: string | null, providerId: string): void;
+  markPlaceResolved(place: Place, at: LatLng, address: string | null, providerId: string): Promise<unknown>;
   now: () => Date;
   warn?: (message: string) => void;
 }
 
 export interface TravelStore {
   /** `undefined` for "never asked", `null` for "asked, nothing found". */
-  getGeo(query: string): LatLng | null | undefined;
-  putGeo(query: string, at: LatLng | null): void;
-  getLeg(key: string): RouteResult | null | undefined;
-  putLeg(key: string, result: RouteResult | null): void;
+  getGeo(query: string): Promise<LatLng | null | undefined>;
+  putGeo(query: string, at: LatLng | null): Promise<void>;
+  getLeg(key: string): Promise<RouteResult | null | undefined>;
+  putLeg(key: string, result: RouteResult | null): Promise<void>;
 }
 
 /**
@@ -216,7 +216,7 @@ async function createLocator(trip: Trip, plan: Plan, places: Place[], deps: Trav
       const at = plausible(
         await geocode(withPlace(place.name, place.city ?? dayLocation ?? trip.destinations[0]), bias),
       );
-      if (at) deps.markPlaceResolved(place, at, place.address, `geo:${at.lat},${at.lng}`);
+      if (at) await deps.markPlaceResolved(place, at, place.address, `geo:${at.lat},${at.lng}`);
       return at;
     }
     const label = block.location.trim() || block.activity.trim();
@@ -344,12 +344,12 @@ async function geocodeOnce(
   bias: LatLng | undefined,
   deps: TravelDeps,
 ): Promise<LatLng | null> {
-  const known = deps.store.getGeo(query);
+  const known = await deps.store.getGeo(query);
   if (known !== undefined) return known;
   try {
     const [match] = await deps.geo.search(query, bias ? { limit: 1, bias } : { limit: 1 });
     const at = match ? { lat: match.lat, lng: match.lng } : null;
-    deps.store.putGeo(query, at);
+    await deps.store.putGeo(query, at);
     return at;
   } catch (err) {
     // Not remembered: a geocoder that was down is not a place that was not
@@ -367,7 +367,7 @@ async function routeOnce(
   deps: TravelDeps,
 ): Promise<RouteResult> {
   const key = legKey(mode, a, b, departure, a.lng);
-  const known = deps.store.getLeg(key);
+  const known = await deps.store.getLeg(key);
   if (known) return known;
 
   const request = { origin: a, destination: b, mode, departure_time: departure };
@@ -382,7 +382,7 @@ async function routeOnce(
   // its coverage, not proof the trip is impossible — so it is estimated, and
   // flagged as one. Only a real answer is kept for next time.
   if (!route) return estimateRoute(request);
-  if (!route.is_estimate) deps.store.putLeg(key, route);
+  if (!route.is_estimate) await deps.store.putLeg(key, route);
   return route;
 }
 

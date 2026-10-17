@@ -191,7 +191,7 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get<{ Params: { id: string } }>('/trips/:id/flights', async (req) => {
-    const selections = listSelections(req.params.id);
+    const selections = await listSelections(req.params.id);
     return {
       selections,
       date_envelope: deriveTripEnvelope(selections.map((s) => s.offer)),
@@ -207,34 +207,34 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Params: { id: string } }>('/trips/:id/flights', async (req, reply) => {
-    getTrip(req.params.id);
+    await getTrip(req.params.id);
 
     const parsed = SelectBody.safeParse(req.body);
     if (!parsed.success) {
       throw badRequest('validation_error', 'Invalid selection', parsed.error.flatten());
     }
 
-    const selection = saveSelection(
+    const selection = await saveSelection(
       req.params.id,
       parsed.data.direction,
       parsed.data.offer as never,
       parsed.data.member_id,
     );
 
-    const selections = listSelections(req.params.id);
+    const selections = await listSelections(req.params.id);
     const envelope = deriveTripEnvelope(selections.map((s) => s.offer));
 
     // Selecting flights is what pins a trip's dates — that's the whole point of
     // the flight step, so by default it writes back to the trip.
     if (envelope && parsed.data.apply_dates_to_trip) {
-      updateTrip(req.params.id, {
+      await updateTrip(req.params.id, {
         start_date: envelope.start_date,
         end_date: envelope.end_date,
         date_flexible: false,
       });
       // And the itinerary has to follow. Changing 26–30 Sep to 26–29 left a
       // day 5 on screen that the trip no longer had.
-      reconcileDays(req.params.id);
+      await reconcileDays(req.params.id);
     }
 
     reply.code(201);
@@ -244,7 +244,7 @@ export async function flightRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { selectionId: string } }>(
     '/trips/:id/flights/:selectionId',
     async (req, reply) => {
-      deleteSelection(req.params.selectionId);
+      await deleteSelection(req.params.selectionId);
       reply.code(204);
     },
   );

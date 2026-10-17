@@ -36,7 +36,7 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
    * spinner with a short timeout.
    */
   app.post<{ Params: { id: string } }>('/trips/:id/plan', async (req, reply) => {
-    getTrip(req.params.id);
+    await getTrip(req.params.id);
 
     const parsed = GenerateBody.safeParse(req.body ?? {});
     if (!parsed.success) {
@@ -47,13 +47,13 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
     reply.code(201);
     return {
       plan: record,
-      updated_day: updatedDay(req.params.id),
-      accepted_conflicts: listAcknowledged(req.params.id),
+      updated_day: await updatedDay(req.params.id),
+      accepted_conflicts: await listAcknowledged(req.params.id),
     };
   });
 
   app.get<{ Params: { id: string } }>('/trips/:id/plan', async (req) => {
-    getTrip(req.params.id);
+    await getTrip(req.params.id);
     // Repair on read, not only on write.
     //
     // Reconciling when flights change fixes it going forward, but a plan that
@@ -61,16 +61,16 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
     // dates without touching flights — stays wrong forever, and the user has
     // no way to ask for it to be rechecked. This is idempotent and returns
     // null when there is nothing to do, so a healthy plan costs one comparison.
-    reconcileDays(req.params.id);
-    const record = getLatestPlan(req.params.id);
+    await reconcileDays(req.params.id);
+    const record = await getLatestPlan(req.params.id);
     if (!record) {
       throw notFound('no_plan_yet', 'This trip has no plan yet. POST to this path to create one.');
     }
     return {
       plan: record,
       // Drives the "Updated from your last chat request." notice on the Trip tab.
-      updated_day: updatedDay(req.params.id),
-      accepted_conflicts: listAcknowledged(req.params.id),
+      updated_day: await updatedDay(req.params.id),
+      accepted_conflicts: await listAcknowledged(req.params.id),
     };
   });
 
@@ -82,16 +82,16 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
    * user cannot see is a failure they will retry blindly.
    */
   app.get<{ Params: { id: string } }>('/trips/:id/plan/failure', async (req) => {
-    getTrip(req.params.id);
-    return { failure: getFailure(req.params.id) };
+    await getTrip(req.params.id);
+    return { failure: await getFailure(req.params.id) };
   });
 
   /** Dismiss the failed state — "keep what's there" rather than retry. */
   app.delete<{ Params: { id: string } }>(
     '/trips/:id/plan/failure',
     async (req, reply) => {
-      getTrip(req.params.id);
-      clearFailure(req.params.id);
+      await getTrip(req.params.id);
+      await clearFailure(req.params.id);
       reply.code(204);
     },
   );
@@ -120,7 +120,7 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
    * to a question the planner never asked is worse than no answer at all.
    */
   app.post<{ Params: { id: string } }>('/trips/:id/plan/answers', async (req, reply) => {
-    getTrip(req.params.id);
+    await getTrip(req.params.id);
 
     const parsed = AnswersBody.safeParse(req.body ?? {});
     if (!parsed.success) {
@@ -135,7 +135,7 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
       );
     }
 
-    const latest = getLatestPlan(req.params.id);
+    const latest = await getLatestPlan(req.params.id);
     const questions = latest?.plan.clarifying_questions ?? [];
     if (questions.length === 0) {
       throw badRequest(
@@ -160,8 +160,8 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
     reply.code(201);
     return {
       plan: record,
-      updated_day: updatedDay(req.params.id),
-      accepted_conflicts: listAcknowledged(req.params.id),
+      updated_day: await updatedDay(req.params.id),
+      accepted_conflicts: await listAcknowledged(req.params.id),
     };
   });
 
@@ -179,8 +179,8 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
    * that already has a plan, it returns that plan rather than wiping it.
    */
   app.post<{ Params: { id: string } }>('/trips/:id/plan/blank', async (req, reply) => {
-    getTrip(req.params.id);
-    const record = createBlankPlan(req.params.id);
+    await getTrip(req.params.id);
+    const record = await createBlankPlan(req.params.id);
     reply.code(201);
     return { plan: record.plan };
   });
@@ -189,9 +189,9 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string } }>(
     '/trips/:id/plan/days',
     async (req, reply) => {
-      getTrip(req.params.id);
+      await getTrip(req.params.id);
       reply.code(201);
-      return { plan: addDay(req.params.id) };
+      return { plan: await addDay(req.params.id) };
     },
   );
 
@@ -204,8 +204,8 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string; day: string } }>(
     '/trips/:id/plan/days/:day',
     async (req) => {
-      getTrip(req.params.id);
-      return { plan: deleteDay(req.params.id, Number(req.params.day)) };
+      await getTrip(req.params.id);
+      return { plan: await deleteDay(req.params.id, Number(req.params.day)) };
     },
   );
 
@@ -241,7 +241,7 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string; day: string } }>(
     '/trips/:id/plan/days/:day/blocks',
     async (req, reply) => {
-      getTrip(req.params.id);
+      await getTrip(req.params.id);
       const parsed = AddBlockBody.safeParse(req.body);
       if (!parsed.success) {
         throw badRequest('validation_error', 'Invalid activity', parsed.error.flatten());
@@ -250,15 +250,15 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
       if (!place_id && !input.activity?.trim()) {
         throw badRequest('validation_error', 'An activity needs a name, or a saved place to take it from.');
       }
-      const place = place_id ? getPlace(place_id) : null;
-      const plan = addBlock(
+      const place = place_id ? await getPlace(place_id) : null;
+      const plan = await addBlock(
         req.params.id,
         Number(req.params.day),
         place
           ? citeSavedPlace(
               input,
               place,
-              place.source_id ? getSource(place.source_id).title : null,
+              place.source_id ? (await getSource(place.source_id)).title : null,
               req.params.id,
             )
           : input,
@@ -271,20 +271,20 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string; blockId: string } }>(
     '/trips/:id/plan/blocks/:blockId',
     async (req) => {
-      getTrip(req.params.id);
+      await getTrip(req.params.id);
       const parsed = BlockBody.partial().safeParse(req.body);
       if (!parsed.success) {
         throw badRequest('validation_error', 'Invalid activity', parsed.error.flatten());
       }
-      return { plan: updateBlock(req.params.id, req.params.blockId, parsed.data) };
+      return { plan: await updateBlock(req.params.id, req.params.blockId, parsed.data) };
     },
   );
 
   app.delete<{ Params: { id: string; blockId: string } }>(
     '/trips/:id/plan/blocks/:blockId',
     async (req) => {
-      getTrip(req.params.id);
-      return { plan: removeBlock(req.params.id, req.params.blockId) };
+      await getTrip(req.params.id);
+      return { plan: await removeBlock(req.params.id, req.params.blockId) };
     },
   );
 
@@ -292,7 +292,7 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string; blockId: string } }>(
     '/trips/:id/plan/blocks/:blockId/reorder',
     async (req) => {
-      getTrip(req.params.id);
+      await getTrip(req.params.id);
       const parsed = z
         .object({ to_index: z.number().int().min(0) })
         .safeParse(req.body);
@@ -300,7 +300,7 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
         throw badRequest('validation_error', 'Expected { to_index }', parsed.error.flatten());
       }
       return {
-        plan: reorderBlock(req.params.id, req.params.blockId, parsed.data.to_index),
+        plan: await reorderBlock(req.params.id, req.params.blockId, parsed.data.to_index),
       };
     },
   );
@@ -313,13 +313,13 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string; blockId: string } }>(
     '/trips/:id/plan/blocks/:blockId/move',
     async (req) => {
-      getTrip(req.params.id);
+      await getTrip(req.params.id);
       const parsed = MoveBody.safeParse(req.body);
       if (!parsed.success) {
         throw badRequest('validation_error', 'Expected { day, time_of_day }', parsed.error.flatten());
       }
       return {
-        plan: moveBlock(
+        plan: await moveBlock(
           req.params.id,
           req.params.blockId,
           parsed.data.day,
@@ -333,12 +333,12 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string; blockId: string } }>(
     '/trips/:id/plan/blocks/:blockId/pin',
     async (req) => {
-      getTrip(req.params.id);
+      await getTrip(req.params.id);
       const parsed = z.object({ pinned: z.boolean() }).safeParse(req.body);
       if (!parsed.success) {
         throw badRequest('validation_error', 'Expected { pinned }', parsed.error.flatten());
       }
-      return { plan: setPinned(req.params.id, req.params.blockId, parsed.data.pinned) };
+      return { plan: await setPinned(req.params.id, req.params.blockId, parsed.data.pinned) };
     },
   );
 
@@ -350,8 +350,8 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
    * client.
    */
   app.get<{ Params: { id: string } }>('/trips/:id/plan/pinned', async (req) => {
-    getTrip(req.params.id);
-    const summary = pinnedSummary(req.params.id);
+    await getTrip(req.params.id);
+    const summary = await pinnedSummary(req.params.id);
     return {
       pinned: summary.pinned.map(({ day, block }) => ({
         day,
@@ -370,8 +370,8 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
 
   /** The Refine tab's conversation, derived from plan revisions. */
   app.get<{ Params: { id: string } }>('/trips/:id/chat', async (req) => {
-    getTrip(req.params.id);
-    return { messages: chatThread(req.params.id) };
+    await getTrip(req.params.id);
+    return { messages: await chatThread(req.params.id) };
   });
 
   const RefineBody = z.object({
@@ -388,7 +388,7 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
    * responds accordingly.
    */
   app.post<{ Params: { id: string } }>('/trips/:id/refine', async (req) => {
-    getTrip(req.params.id);
+    await getTrip(req.params.id);
     const parsed = RefineBody.safeParse(req.body);
     if (!parsed.success) {
       throw badRequest('validation_error', 'Expected { message }', parsed.error.flatten());
@@ -400,7 +400,7 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
 
     return {
       ...result,
-      updated_day: result.plan ? updatedDay(req.params.id) : null,
+      updated_day: result.plan ? await updatedDay(req.params.id) : null,
     };
   });
 
@@ -411,20 +411,20 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
 
   /** "Looks good" / undo on a conflict card. */
   app.post<{ Params: { id: string } }>('/trips/:id/conflicts/accept', async (req) => {
-    getTrip(req.params.id);
+    await getTrip(req.params.id);
     const parsed = AcceptBody.safeParse(req.body);
     if (!parsed.success) {
       throw badRequest('validation_error', 'Expected { tag, accepted }', parsed.error.flatten());
     }
-    setAcknowledged(req.params.id, parsed.data.tag, parsed.data.accepted);
-    return { accepted_conflicts: listAcknowledged(req.params.id) };
+    await setAcknowledged(req.params.id, parsed.data.tag, parsed.data.accepted);
+    return { accepted_conflicts: await listAcknowledged(req.params.id) };
   });
 
   app.get<{ Params: { id: string } }>('/trips/:id/plan/revisions', async (req) => {
-    getTrip(req.params.id);
+    await getTrip(req.params.id);
     // Metadata only — the full plan JSON per revision would be a large payload.
     return {
-      revisions: listPlans(req.params.id).map((p) => ({
+      revisions: (await listPlans(req.params.id)).map((p) => ({
         id: p.id,
         revision: p.revision,
         status: p.status,
@@ -436,7 +436,7 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get<{ Params: { planId: string } }>('/plans/:planId', async (req) => ({
-    plan: getPlan(req.params.planId),
+    plan: await getPlan(req.params.planId),
   }));
 }
 

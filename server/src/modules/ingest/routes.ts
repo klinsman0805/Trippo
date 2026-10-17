@@ -18,7 +18,7 @@ const ImportTextBody = z.object({
 
 export async function ingestRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/trips/:id/sources', async (req) => ({
-    sources: ingest.listSources(req.params.id),
+    sources: await ingest.listSources(req.params.id),
   }));
 
   app.post<{ Params: { id: string } }>('/trips/:id/sources/url', async (req, reply) => {
@@ -50,7 +50,7 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { sourceId: string } }>(
     '/trips/:id/sources/:sourceId',
     async (req, reply) => {
-      ingest.deleteSource(req.params.sourceId);
+      await ingest.deleteSource(req.params.sourceId);
       reply.code(204);
     },
   );

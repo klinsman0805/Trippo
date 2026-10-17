@@ -41,18 +41,18 @@ export async function generatePlan(
   tripId: string,
   userRequest: string | null,
 ): Promise<PlanRecord> {
-  const trip = getTrip(tripId);
-  const places = listPlaces(tripId);
-  const flights = listSelections(tripId);
+  const trip = await getTrip(tripId);
+  const places = await listPlaces(tripId);
+  const flights = await listSelections(tripId);
 
-  const previous = getLatestPlan(tripId);
+  const previous = await getLatestPlan(tripId);
   let context = buildPlannerContext(trip, places, flights, userRequest);
 
   // Anything the user wrote and kept pinned is a fixed point, not a
   // suggestion. It is described to the planner as already-occupied time so it
   // plans around it, and re-inserted afterwards so the result is authoritative
   // rather than dependent on the model having complied.
-  const { pinned } = pinnedSummary(tripId);
+  const { pinned } = await pinnedSummary(tripId);
   if (pinned.length) {
     context += `\n\n## ALREADY PLANNED BY THE TRAVELLER — DO NOT CHANGE OR REPLACE\nThese slots are taken. Plan around them, do not duplicate them, and do not emit them in your own output. Budget for them: they are already counted in the trip's cost.\n\n${pinned
       .map(
@@ -78,7 +78,7 @@ export async function generatePlan(
   // attempt — the failed screen should never depend on which door you came in.
   const startedAt = Date.now();
   const sourceTitles = new Map(
-    listSources(tripId).map((s) => [s.id, s.title ?? s.url ?? 'a pasted note']),
+    (await listSources(tripId)).map((s) => [s.id, s.title ?? s.url ?? 'a pasted note']),
   );
 
   let plan: Plan;
@@ -90,7 +90,7 @@ export async function generatePlan(
     // the model wrote in full.
     plan = hydrate(draft, trip, places, sourceTitles);
   } catch (err) {
-    recordFailure(tripId, err, {
+    await recordFailure(tripId, err, {
       elapsedMs: Date.now() - startedAt,
       lastGoodRevision: previous?.revision ?? null,
       userRequest,
@@ -98,8 +98,8 @@ export async function generatePlan(
     throw err;
   }
 
-  const record = savePlan(tripId, reinstatePinned(plan, pinned), userRequest);
-  clearFailure(tripId);
+  const record = await savePlan(tripId, reinstatePinned(plan, pinned), userRequest);
+  await clearFailure(tripId);
   return record;
 }
 
@@ -210,49 +210,52 @@ function reinstatePinned(
   return plan;
 }
 
-function savePlan(tripId: string, plan: Plan, userRequest: string | null): PlanRecord {
-  const revision = (getLatestPlan(tripId)?.revision ?? 0) + 1;
+async function savePlan(tripId: string, plan: Plan, userRequest: string | null): Promise<PlanRecord> {
   const id = newId('plan');
   // The model is not asked for block ids, so they are minted here — before the
   // plan is ever stored, so nothing downstream sees an identity-less block.
   ensureBlockIds(plan);
 
-  db.prepare(
+  // The next revision is worked out by the insert itself rather than read
+  // first: two runs finishing together would otherwise both claim the same
+  // number. The unique index turns the rare collision into an error instead
+  // of two plans sharing a revision.
+  await db.run(
     `INSERT INTO plans (id, trip_id, revision, status, summary, plan, model, user_request, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    tripId,
-    revision,
-    plan.status,
-    plan.conversational_summary,
-    JSON.stringify(plan),
-    env.PLANNER_MODEL,
-    userRequest,
-    nowIso(),
+     SELECT ?, ?, COALESCE(MAX(revision), 0) + 1, ?, ?, ?, ?, ?, ?
+     FROM plans WHERE trip_id = ?`,
+    [
+      id,
+      tripId,
+      plan.status,
+      plan.conversational_summary,
+      JSON.stringify(plan),
+      env.PLANNER_MODEL,
+      userRequest,
+      nowIso(),
+      tripId,
+    ],
   );
 
-  touchTrip(tripId);
-  return getPlan(id);
+  await touchTrip(tripId);
+  return await getPlan(id);
 }
 
-export function getPlan(id: string): PlanRecord {
-  const row = db.prepare('SELECT * FROM plans WHERE id = ?').get(id);
+export async function getPlan(id: string): Promise<PlanRecord> {
+  const row = await db.one('SELECT * FROM plans WHERE id = ?', [id]);
   if (!row) throw notFound('plan_not_found', `No plan with id ${id}`);
-  return rowToPlan(row as Record<string, unknown>);
+  return rowToPlan(row);
 }
 
-export function getLatestPlan(tripId: string): PlanRecord | null {
-  const row = db
-    .prepare('SELECT * FROM plans WHERE trip_id = ? ORDER BY revision DESC LIMIT 1')
-    .get(tripId);
-  return row ? rowToPlan(row as Record<string, unknown>) : null;
+export async function getLatestPlan(tripId: string): Promise<PlanRecord | null> {
+  const row = await db.one('SELECT * FROM plans WHERE trip_id = ? ORDER BY revision DESC LIMIT 1', [
+    tripId,
+  ]);
+  return row ? rowToPlan(row) : null;
 }
 
-export function listPlans(tripId: string): PlanRecord[] {
-  const rows = db
-    .prepare('SELECT * FROM plans WHERE trip_id = ? ORDER BY revision DESC')
-    .all(tripId) as Record<string, unknown>[];
+export async function listPlans(tripId: string): Promise<PlanRecord[]> {
+  const rows = await db.query('SELECT * FROM plans WHERE trip_id = ? ORDER BY revision DESC', [tripId]);
   return rows.map(rowToPlan);
 }
 

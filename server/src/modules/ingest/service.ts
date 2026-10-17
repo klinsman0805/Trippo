@@ -50,7 +50,7 @@ export interface ImportResult {
  * lets the client show a paste box against that same source row.
  */
 export async function importUrl(tripId: string, rawInput: string): Promise<ImportResult> {
-  getTrip(tripId);
+  await getTrip(tripId);
 
   // Users paste share text ("…打开【小红书】App查看… http://xhslink.com/x"),
   // not bare URLs. Pull the first URL out of whatever arrived.
@@ -67,7 +67,7 @@ export async function importUrl(tripId: string, rawInput: string): Promise<Impor
   }
 
   const extractor = resolveExtractor(url);
-  const sourceId = createSource(tripId, {
+  const sourceId = await createSource(tripId, {
     url: url.toString(),
     kind: extractor.kind,
     status: 'pending',
@@ -78,9 +78,9 @@ export async function importUrl(tripId: string, rawInput: string): Promise<Impor
     content = await extractor.extract(url);
   } catch (err) {
     if (err instanceof NeedsManualInputError) {
-      updateSource(sourceId, { status: 'needs_manual', error: err.message });
+      await updateSource(sourceId, { status: 'needs_manual', error: err.message });
       return {
-        source: getSource(sourceId),
+        source: await getSource(sourceId),
         summary: null,
         planning_notes: [],
         places: [],
@@ -89,11 +89,11 @@ export async function importUrl(tripId: string, rawInput: string): Promise<Impor
       };
     }
     const message = err instanceof Error ? err.message : 'Unknown extraction failure';
-    updateSource(sourceId, { status: 'failed', error: message });
+    await updateSource(sourceId, { status: 'failed', error: message });
     throw err;
   }
 
-  updateSource(sourceId, {
+  await updateSource(sourceId, {
     status: 'fetched',
     title: content.title,
     author: content.author,
@@ -112,7 +112,7 @@ export async function importManualText(
   text: string,
   opts: { kind?: SourceKind; title?: string; sourceId?: string } = {},
 ): Promise<ImportResult> {
-  getTrip(tripId);
+  await getTrip(tripId);
 
   if (text.trim().length < 20) {
     throw badRequest('text_too_short', 'Paste at least a sentence or two of the source text.');
@@ -131,11 +131,11 @@ export async function importManualText(
   // the user doesn't end up with two source entries for one link.
   const sourceId =
     opts.sourceId ??
-    createSource(tripId, { url: null, kind: content.kind, status: 'fetched' });
+    await createSource(tripId, { url: null, kind: content.kind, status: 'fetched' });
 
-  if (opts.sourceId) getSource(opts.sourceId); // 404s if the id is bogus
+  if (opts.sourceId) await getSource(opts.sourceId); // 404s if the id is bogus
 
-  updateSource(sourceId, {
+  await updateSource(sourceId, {
     status: 'fetched',
     title: content.title,
     raw_text: content.text,
@@ -155,7 +155,7 @@ async function finishImport(
     extraction = await extractPlaces(content);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Extraction failed';
-    updateSource(sourceId, { status: 'failed', error: message });
+    await updateSource(sourceId, { status: 'failed', error: message });
     throw err;
   }
 
@@ -170,12 +170,12 @@ async function finishImport(
     resolved: false,
   }));
 
-  const places = addPlaces(tripId, inputs);
-  updateSource(sourceId, { status: 'extracted', error: null });
-  touchTrip(tripId);
+  const places = await addPlaces(tripId, inputs);
+  await updateSource(sourceId, { status: 'extracted', error: null });
+  await touchTrip(tripId);
 
   return {
-    source: getSource(sourceId),
+    source: await getSource(sourceId),
     summary: extraction.summary,
     planning_notes: extraction.planning_notes,
     places,
@@ -189,23 +189,24 @@ async function finishImport(
 
 // --- source persistence ---
 
-function createSource(
+async function createSource(
   tripId: string,
   data: { url: string | null; kind: SourceKind; status: SourceStatus },
-): string {
+): Promise<string> {
   const id = newId('src');
   const ts = nowIso();
-  db.prepare(
+  await db.run(
     `INSERT INTO sources (id, trip_id, url, kind, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, tripId, data.url, data.kind, data.status, ts, ts);
+    [id, tripId, data.url, data.kind, data.status, ts, ts],
+  );
   return id;
 }
 
-function updateSource(
+async function updateSource(
   id: string,
   patch: Partial<Pick<SourceRecord, 'status' | 'title' | 'author' | 'raw_text' | 'error'>>,
-): void {
+): Promise<void> {
   const sets: string[] = [];
   const params: Record<string, unknown> = { id, updated_at: nowIso() };
   for (const [key, value] of Object.entries(patch)) {
@@ -214,15 +215,13 @@ function updateSource(
     params[key] = value;
   }
   if (!sets.length) return;
-  db.prepare(
-    `UPDATE sources SET ${sets.join(', ')}, updated_at = @updated_at WHERE id = @id`,
-  ).run(params);
+  await db.run(`UPDATE sources SET ${sets.join(', ')}, updated_at = @updated_at WHERE id = @id`, params);
 }
 
-export function getSource(id: string): SourceRecord {
-  const row = db.prepare('SELECT * FROM sources WHERE id = ?').get(id);
+export async function getSource(id: string): Promise<SourceRecord> {
+  const row = await db.one<SourceRecord>('SELECT * FROM sources WHERE id = ?', [id]);
   if (!row) throw notFound('source_not_found', `No source with id ${id}`);
-  return row as SourceRecord;
+  return row;
 }
 
 /**
@@ -230,18 +229,17 @@ export function getSource(id: string): SourceRecord {
  * of it — the one number that says whether an import was worth anything, and
  * the reason the list is worth showing at all.
  */
-export function listSources(tripId: string): (SourceRecord & { place_count: number })[] {
-  return db
-    .prepare(
-      `SELECT s.*, (SELECT COUNT(*) FROM places p WHERE p.source_id = s.id) AS place_count
-         FROM sources s
-        WHERE s.trip_id = ?
-        ORDER BY s.created_at DESC`,
-    )
-    .all(tripId) as (SourceRecord & { place_count: number })[];
+export async function listSources(tripId: string): Promise<(SourceRecord & { place_count: number })[]> {
+  return db.query<SourceRecord & { place_count: number }>(
+    `SELECT s.*, (SELECT COUNT(*)::int FROM places p WHERE p.source_id = s.id) AS place_count
+       FROM sources s
+      WHERE s.trip_id = ?
+      ORDER BY s.created_at DESC`,
+    [tripId],
+  );
 }
 
-export function deleteSource(id: string): void {
-  const res = db.prepare('DELETE FROM sources WHERE id = ?').run(id);
-  if (res.changes === 0) throw notFound('source_not_found', `No source with id ${id}`);
+export async function deleteSource(id: string): Promise<void> {
+  const changes = await db.run('DELETE FROM sources WHERE id = ?', [id]);
+  if (changes === 0) throw notFound('source_not_found', `No source with id ${id}`);
 }

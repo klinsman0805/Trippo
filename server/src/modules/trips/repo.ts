@@ -1,4 +1,4 @@
-import { db, fromJson, newId, nowIso, toJson } from '../../db/index.js';
+import { db, fromJson, newId, nowIso, toJson, type Queryable } from '../../db/index.js';
 import { notFound } from '../../lib/errors.js';
 import type {
   Member,
@@ -68,18 +68,23 @@ export function rowToPlace(r: Row): Place {
   };
 }
 
-const insertMemberStmt = db.prepare(`
+const INSERT_MEMBER = `
   INSERT INTO members (id, trip_id, name, departure_city, interests, pace,
     budget_sensitivity, dietary_restrictions, accessibility_needs, deal_breakers,
     wants, avoids, created_at)
   VALUES (@id, @trip_id, @name, @departure_city, @interests, @pace,
     @budget_sensitivity, @dietary_restrictions, @accessibility_needs, @deal_breakers,
     @wants, @avoids, @created_at)
-`);
+`;
 
-export function addMember(tripId: string, input: MemberInput): Member {
+/** [q] lets a caller already inside a transaction add the member in it. */
+export async function addMember(
+  tripId: string,
+  input: MemberInput,
+  q: Queryable = db,
+): Promise<Member> {
   const id = newId('mem');
-  insertMemberStmt.run({
+  await q.run(INSERT_MEMBER, {
     id,
     trip_id: tripId,
     name: input.name,
@@ -94,11 +99,11 @@ export function addMember(tripId: string, input: MemberInput): Member {
     avoids: toJson(input.avoids),
     created_at: nowIso(),
   });
-  return getMember(id);
+  return await getMember(id, q);
 }
 
-export function getMember(id: string): Member {
-  const row = db.prepare('SELECT * FROM members WHERE id = ?').get(id) as Row | undefined;
+export async function getMember(id: string, q: Queryable = db): Promise<Member> {
+  const row = await q.one('SELECT * FROM members WHERE id = ?', [id]);
   if (!row) throw notFound('member_not_found', `No member with id ${id}`);
   return rowToMember(row);
 }
@@ -131,8 +136,8 @@ const MEMBER_JSON_FIELDS = new Set([
  * Changing pace or access needs alters what the planner has to reconcile, so
  * the caller is expected to surface that the conflicts are now stale.
  */
-export function updateMember(id: string, patch: Record<string, unknown>): Member {
-  getMember(id); // 404s if missing
+export async function updateMember(id: string, patch: Record<string, unknown>): Promise<Member> {
+  await getMember(id); // 404s if missing
 
   const sets: string[] = [];
   const params: Record<string, unknown> = { id };
@@ -144,76 +149,83 @@ export function updateMember(id: string, patch: Record<string, unknown>): Member
   }
 
   if (sets.length > 0) {
-    db.prepare(`UPDATE members SET ${sets.join(', ')} WHERE id = @id`).run(params);
+    await db.run(`UPDATE members SET ${sets.join(', ')} WHERE id = @id`, params);
   }
-  return getMember(id);
+  return await getMember(id);
 }
 
-export function deleteMember(id: string): void {
-  const res = db.prepare('DELETE FROM members WHERE id = ?').run(id);
-  if (res.changes === 0) throw notFound('member_not_found', `No member with id ${id}`);
+export async function deleteMember(id: string): Promise<void> {
+  const changes = await db.run('DELETE FROM members WHERE id = ?', [id]);
+  if (changes === 0) throw notFound('member_not_found', `No member with id ${id}`);
 }
 
-export function createTrip(input: TripInput): Trip {
+export async function createTrip(input: TripInput, ownerId: string): Promise<Trip> {
   const id = newId('trip');
   const ts = nowIso();
 
-  const tx = db.transaction(() => {
-    db.prepare(
-      `INSERT INTO trips (id, title, destinations, start_date, end_date, date_flexible,
+  await db.tx(async (q) => {
+    await q.run(
+      `INSERT INTO trips (id, owner_id, title, destinations, start_date, end_date, date_flexible,
          currency, total_budget, budget_basis, purpose, hard_constraints, notes,
          created_at, updated_at)
-       VALUES (@id, @title, @destinations, @start_date, @end_date, @date_flexible,
+       VALUES (@id, @owner_id, @title, @destinations, @start_date, @end_date, @date_flexible,
          @currency, @total_budget, @budget_basis, @purpose, @hard_constraints, @notes,
          @created_at, @updated_at)`,
-    ).run({
-      id,
-      title: input.title,
-      destinations: toJson(input.destinations),
-      start_date: input.start_date ?? null,
-      end_date: input.end_date ?? null,
-      date_flexible: input.date_flexible ? 1 : 0,
-      currency: input.currency,
-      total_budget: input.total_budget ?? null,
-      budget_basis: input.budget_basis,
-      purpose: input.purpose ?? null,
-      hard_constraints: toJson(input.hard_constraints),
-      notes: input.notes ?? null,
-      created_at: ts,
-      updated_at: ts,
-    });
+      {
+        id,
+        owner_id: ownerId,
+        title: input.title,
+        destinations: toJson(input.destinations),
+        start_date: input.start_date ?? null,
+        end_date: input.end_date ?? null,
+        date_flexible: input.date_flexible ? 1 : 0,
+        currency: input.currency,
+        total_budget: input.total_budget ?? null,
+        budget_basis: input.budget_basis,
+        purpose: input.purpose ?? null,
+        hard_constraints: toJson(input.hard_constraints),
+        notes: input.notes ?? null,
+        created_at: ts,
+        updated_at: ts,
+      },
+    );
 
-    for (const m of input.members) addMember(id, m);
+    for (const m of input.members) await addMember(id, m, q);
   });
-  tx();
 
-  return getTrip(id);
+  return await getTrip(id);
 }
 
-export function getTrip(id: string): Trip {
-  const row = db.prepare('SELECT * FROM trips WHERE id = ?').get(id) as Row | undefined;
+export async function getTrip(id: string): Promise<Trip> {
+  const row = await db.one('SELECT * FROM trips WHERE id = ?', [id]);
   if (!row) throw notFound('trip_not_found', `No trip with id ${id}`);
-  const memberRows = db
-    .prepare('SELECT * FROM members WHERE trip_id = ? ORDER BY created_at')
-    .all(id) as Row[];
+  const memberRows = await db.query('SELECT * FROM members WHERE trip_id = ? ORDER BY created_at', [id]);
   return rowToTrip(row, memberRows.map(rowToMember));
 }
 
+/** Who a trip belongs to, or undefined when there is no such trip. */
+export async function tripOwner(id: string): Promise<string | undefined> {
+  const row = await db.one<{ owner_id: string }>('SELECT owner_id FROM trips WHERE id = ?', [id]);
+  return row?.owner_id;
+}
+
 /**
- * Trip list for the picker.
+ * One person's trips, for the picker.
  *
  * Members are counted rather than hydrated — the list only needs "3 travellers",
  * and loading every member of every trip to render one number would grow with
  * the account. `member_count` is on the row; `members` stays empty.
  */
-export function listTrips(): (Trip & { member_count: number })[] {
-  const rows = db
-    .prepare(
-      `SELECT t.*, (SELECT COUNT(*) FROM members m WHERE m.trip_id = t.id) AS member_count
-       FROM trips t
-       ORDER BY t.updated_at DESC`,
-    )
-    .all() as Row[];
+export async function listTrips(ownerId: string): Promise<(Trip & { member_count: number })[]> {
+  const rows = await db.query(
+    // ::int, because Postgres counts in bigint and the driver hands those back
+    // as strings.
+    `SELECT t.*, (SELECT COUNT(*)::int FROM members m WHERE m.trip_id = t.id) AS member_count
+     FROM trips t
+     WHERE t.owner_id = ?
+     ORDER BY t.updated_at DESC`,
+    [ownerId],
+  );
 
   return rows.map((r) => ({
     ...rowToTrip(r, []),
@@ -235,8 +247,8 @@ const PATCHABLE = new Set([
   'notes',
 ]);
 
-export function updateTrip(id: string, patch: Record<string, unknown>): Trip {
-  getTrip(id); // 404s if missing
+export async function updateTrip(id: string, patch: Record<string, unknown>): Promise<Trip> {
+  await getTrip(id); // 404s if missing
 
   const sets: string[] = [];
   const params: Record<string, unknown> = { id, updated_at: nowIso() };
@@ -250,19 +262,17 @@ export function updateTrip(id: string, patch: Record<string, unknown>): Trip {
   }
 
   if (sets.length > 0) {
-    db.prepare(
-      `UPDATE trips SET ${sets.join(', ')}, updated_at = @updated_at WHERE id = @id`,
-    ).run(params);
+    await db.run(`UPDATE trips SET ${sets.join(', ')}, updated_at = @updated_at WHERE id = @id`, params);
   }
-  return getTrip(id);
+  return await getTrip(id);
 }
 
-export function deleteTrip(id: string): void {
-  const res = db.prepare('DELETE FROM trips WHERE id = ?').run(id);
-  if (res.changes === 0) throw notFound('trip_not_found', `No trip with id ${id}`);
+export async function deleteTrip(id: string): Promise<void> {
+  const changes = await db.run('DELETE FROM trips WHERE id = ?', [id]);
+  if (changes === 0) throw notFound('trip_not_found', `No trip with id ${id}`);
 }
 
 /** Touch updated_at so trip lists sort by real activity, not just edits. */
-export function touchTrip(id: string): void {
-  db.prepare('UPDATE trips SET updated_at = ? WHERE id = ?').run(nowIso(), id);
+export async function touchTrip(id: string): Promise<void> {
+  await db.run('UPDATE trips SET updated_at = ? WHERE id = ?', [nowIso(), id]);
 }

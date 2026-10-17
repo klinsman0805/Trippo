@@ -83,49 +83,49 @@ export interface StoredSelection {
  * first one deciding the dates. Changing your mind about a flight has to
  * actually change the trip.
  */
-export function saveSelection(
+export async function saveSelection(
   tripId: string,
   direction: 'outbound' | 'return',
   offer: FlightOffer,
   memberId?: string | null,
-): StoredSelection {
+): Promise<StoredSelection> {
   const id = newId('fls');
 
-  const tx = db.transaction(() => {
-    db.prepare(
+  await db.tx(async (q) => {
+    // IS NOT DISTINCT FROM: equal, counting two nulls as equal — a trip-wide
+    // selection has no member, and must still replace the last trip-wide one.
+    await q.run(
       `DELETE FROM flight_selections
-       WHERE trip_id = ? AND direction = ?
-         AND (member_id IS ? OR member_id = ?)`,
-    ).run(tripId, direction, memberId ?? null, memberId ?? null);
+       WHERE trip_id = ? AND direction = ? AND member_id IS NOT DISTINCT FROM ?`,
+      [tripId, direction, memberId ?? null],
+    );
 
-    db.prepare(
+    await q.run(
       `INSERT INTO flight_selections (id, trip_id, member_id, direction, offer, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(id, tripId, memberId ?? null, direction, JSON.stringify(offer), nowIso());
+      [id, tripId, memberId ?? null, direction, JSON.stringify(offer), nowIso()],
+    );
   });
-  tx();
 
-  return getSelection(id);
+  return await getSelection(id);
 }
 
-export function getSelection(id: string): StoredSelection {
-  const row = db.prepare('SELECT * FROM flight_selections WHERE id = ?').get(id) as
-    | Record<string, unknown>
-    | undefined;
+export async function getSelection(id: string): Promise<StoredSelection> {
+  const row = await db.one('SELECT * FROM flight_selections WHERE id = ?', [id]);
   if (!row) throw notFound('selection_not_found', `No flight selection with id ${id}`);
   return rowToSelection(row);
 }
 
-export function listSelections(tripId: string): StoredSelection[] {
-  const rows = db
-    .prepare('SELECT * FROM flight_selections WHERE trip_id = ? ORDER BY created_at')
-    .all(tripId) as Record<string, unknown>[];
+export async function listSelections(tripId: string): Promise<StoredSelection[]> {
+  const rows = await db.query('SELECT * FROM flight_selections WHERE trip_id = ? ORDER BY created_at', [
+    tripId,
+  ]);
   return rows.map(rowToSelection);
 }
 
-export function deleteSelection(id: string): void {
-  const res = db.prepare('DELETE FROM flight_selections WHERE id = ?').run(id);
-  if (res.changes === 0) {
+export async function deleteSelection(id: string): Promise<void> {
+  const changes = await db.run('DELETE FROM flight_selections WHERE id = ?', [id]);
+  if (changes === 0) {
     throw notFound('selection_not_found', `No flight selection with id ${id}`);
   }
 }

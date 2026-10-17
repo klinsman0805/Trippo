@@ -18,8 +18,8 @@ export interface ChatMessage {
  * the thread keeps a single source of truth — a message can't drift out of sync
  * with the plan it produced, and deleting a revision can't orphan a bubble.
  */
-export function chatThread(tripId: string): ChatMessage[] {
-  const revisions = listPlans(tripId).slice().reverse(); // oldest first
+export async function chatThread(tripId: string): Promise<ChatMessage[]> {
+  const revisions = (await listPlans(tripId)).slice().reverse(); // oldest first
   const messages: ChatMessage[] = [];
 
   for (const rev of revisions) {
@@ -50,8 +50,8 @@ export function chatThread(tripId: string): ChatMessage[] {
  * Returns null for the first revision, or when a refinement changed nothing in
  * the itinerary (a budget question, say, which only alters the prose).
  */
-export function updatedDay(tripId: string): number | null {
-  const revisions = listPlans(tripId); // newest first
+export async function updatedDay(tripId: string): Promise<number | null> {
+  const revisions = await listPlans(tripId); // newest first
   const [latest, previous] = revisions;
   if (!latest || !previous) return null;
 

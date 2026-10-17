@@ -13,33 +13,36 @@ const parse = <S extends z.ZodTypeAny>(schema: S, body: unknown): z.output<S> =>
   return result.data;
 };
 
+/** Everyone is one user until sign-in lands; replaced by the request's user. */
+const LOCAL_OWNER = 'local';
+
 export async function tripRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/trips', async () => ({ trips: repo.listTrips() }));
+  app.get('/trips', async () => ({ trips: await repo.listTrips(LOCAL_OWNER) }));
 
   app.post('/trips', async (req, reply) => {
-    const trip = repo.createTrip(parse(TripInputSchema, req.body));
+    const trip = await repo.createTrip(parse(TripInputSchema, req.body), LOCAL_OWNER);
     reply.code(201);
     return { trip };
   });
 
   app.get<{ Params: { id: string } }>('/trips/:id', async (req) => ({
-    trip: repo.getTrip(req.params.id),
+    trip: await repo.getTrip(req.params.id),
   }));
 
   app.patch<{ Params: { id: string } }>('/trips/:id', async (req) => ({
-    trip: repo.updateTrip(req.params.id, parse(TripPatchSchema, req.body)),
+    trip: await repo.updateTrip(req.params.id, parse(TripPatchSchema, req.body)),
   }));
 
   app.delete<{ Params: { id: string } }>('/trips/:id', async (req, reply) => {
-    repo.deleteTrip(req.params.id);
+    await repo.deleteTrip(req.params.id);
     reply.code(204);
   });
 
   // --- members ---
 
   app.post<{ Params: { id: string } }>('/trips/:id/members', async (req, reply) => {
-    repo.getTrip(req.params.id);
-    const member = repo.addMember(req.params.id, parse(MemberInputSchema, req.body));
+    await repo.getTrip(req.params.id);
+    const member = await repo.addMember(req.params.id, parse(MemberInputSchema, req.body));
     reply.code(201);
     return { member };
   });
@@ -47,7 +50,7 @@ export async function tripRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string; memberId: string } }>(
     '/trips/:id/members/:memberId',
     async (req) => ({
-      member: repo.updateMember(
+      member: await repo.updateMember(
         req.params.memberId,
         parse(MemberInputSchema.partial(), req.body),
       ),
@@ -60,7 +63,7 @@ export async function tripRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string; memberId: string } }>(
     '/trips/:id/members/:memberId',
     async (req, reply) => {
-      repo.deleteMember(req.params.memberId);
+      await repo.deleteMember(req.params.memberId);
       reply.code(204);
     },
   );
@@ -68,7 +71,7 @@ export async function tripRoutes(app: FastifyInstance): Promise<void> {
   // --- saved places (the candidate pool the planner draws from) ---
 
   app.get<{ Params: { id: string } }>('/trips/:id/places', async (req) => ({
-    places: placesRepo.listPlaces(req.params.id),
+    places: await placesRepo.listPlaces(req.params.id),
   }));
 
   const PlaceBody = z.object({
@@ -85,8 +88,8 @@ export async function tripRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Params: { id: string } }>('/trips/:id/places', async (req, reply) => {
-    repo.getTrip(req.params.id);
-    const place = placesRepo.addPlace(req.params.id, parse(PlaceBody, req.body));
+    await repo.getTrip(req.params.id);
+    const place = await placesRepo.addPlace(req.params.id, parse(PlaceBody, req.body));
     reply.code(201);
     return { place };
   });
@@ -94,7 +97,7 @@ export async function tripRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { placeId: string } }>(
     '/trips/:id/places/:placeId',
     async (req, reply) => {
-      placesRepo.deletePlace(req.params.placeId);
+      await placesRepo.deletePlace(req.params.placeId);
       reply.code(204);
     },
   );
