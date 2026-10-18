@@ -17,7 +17,8 @@ import {
   updateBlock,
 } from './blocks.js';
 import { getSource } from '../ingest/service.js';
-import { getPlace } from '../trips/places.repo.js';
+import { getPlace, listPlaces } from '../trips/places.repo.js';
+import { findClosures } from './hours.js';
 import { citeSavedPlace } from './cite.js';
 import { clearFailure, getFailure } from './failure.js';
 import { refine } from './refine.js';
@@ -438,6 +439,21 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { planId: string } }>('/plans/:planId', async (req) => ({
     plan: await getPlan(req.params.planId),
   }));
+
+  /**
+   * Stops the plan has timed when the place is shut.
+   *
+   * Its own route, like the travel times, rather than a field on the plan: it
+   * is derived from the hours and the plan as they are *now*, so correcting a
+   * place's hours or moving a block changes the answer, and a copy saved
+   * inside the plan would be wrong by the next edit.
+   */
+  app.get<{ Params: { id: string } }>('/trips/:id/plan/closures', async (req) => {
+    const trip = await getTrip(req.params.id);
+    const record = await getLatestPlan(trip.id);
+    if (!record) throw notFound('no_plan_yet', 'This trip has no plan yet.');
+    return { closures: findClosures(record.plan, await listPlaces(trip.id)) };
+  });
 }
 
 /**

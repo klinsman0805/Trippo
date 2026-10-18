@@ -155,6 +155,9 @@ class _TripTabState extends State<TripTab> {
     // Pages either side are built too, so their legs are on their way before
     // the swipe that shows them.
     controller.ensureTravelFor(day);
+    // One request for the whole plan, not per day — it only re-asks when the
+    // timing changes, so building three pages does not make three calls.
+    controller.ensureClosures();
     final travel = controller.travelOn(day);
 
     return SingleChildScrollView(
@@ -178,6 +181,8 @@ class _TripTabState extends State<TripTab> {
                     short: short,
                     flightLabel: controller.flightLabelFor(short),
                   ),
+                if (controller.closuresFor(day.day) case final shut when shut.isNotEmpty)
+                  ClosedStopsBand(closures: shut),
                 _dayMeta(day, currency),
                 const SizedBox(height: 10),
                 if (controller.dayIsEmpty(day))
@@ -1010,6 +1015,67 @@ class _DashedBorderPainter extends CustomPainter {
 ///
 /// The planner left those slots out deliberately; this says so, in the day's
 /// own context, with a way back to the decision that caused it.
+/// Stops this day has timed for when the place is shut.
+///
+/// Red rather than the short day's amber, and expanded rather than collapsed:
+/// a short day is a fact about the trip to take in once, while this is the
+/// plan being wrong about something it was told. The plan says 18:00 and the
+/// market shut at 14:00 — there is nothing to weigh up, so it is not hidden
+/// behind a tap.
+///
+/// It names the stop and the hours and stops there. Fixing it is retiming or
+/// removing the stop, which the card below already does, and a band that
+/// offered its own way to do that would be a second route to the same edit.
+class ClosedStopsBand extends StatelessWidget {
+  const ClosedStopsBand({super.key, required this.closures});
+
+  final List<PlanClosure> closures;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = WayfareTheme.of(context);
+    final many = closures.length > 1;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: WayfareColors.overBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: theme.cardLg,
+          side: const BorderSide(color: WayfareColors.overBorder, width: 1.5),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              WayfareEyebrow(
+                many ? 'Closed then · ${closures.length} stops' : 'Closed then',
+                color: WayfareColors.overBudget,
+                size: 11.5,
+              ),
+              const SizedBox(height: 6),
+              for (final closure in closures)
+                Padding(
+                  padding: EdgeInsets.only(bottom: closure == closures.last ? 0 : 6),
+                  child: Text(
+                    closure.note,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      height: 1.35,
+                      color: WayfareColors.overBudget,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ShortDayBand extends StatefulWidget {
   const ShortDayBand({
     super.key,

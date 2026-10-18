@@ -73,6 +73,12 @@ export interface Place {
   google_place_id: string | null;
   why: string | null;
   tags: string[];
+  /**
+   * Opening hours as the source gave them, JSON per `OpeningHours`, or null
+   * when the source said nothing. Read with `parseHours`, never `JSON.parse`:
+   * it comes from a model reading a post, so it is a boundary.
+   */
+  hours: string | null;
   resolved: boolean;
   created_at: string;
 }

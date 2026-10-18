@@ -26,6 +26,7 @@ Rules:
 - Set "city" from context when the source makes it unambiguous; otherwise null. Do not guess.
 - Preserve the original-language name in "name_original" when the source names a place in a non-English script, and give a romanised or English name in "name" if the source provides one, otherwise repeat the original.
 - If the page contains no concrete places, return an empty array. An empty result is correct and useful; a fabricated one is not.
+- Record opening hours in "hours" only when the source states them, as one entry per distinct set of times, naming the weekdays it covers. "Open daily 10am - 10pm" is one entry covering all seven days; "Mon-Fri 10am-6:30pm, Sat-Sun 9am-6:30pm" is two; "10am-11pm, closed Mondays" is one entry covering Tuesday to Sunday. A day you leave out of every entry means the place is shut that day, so never list a day the source says it closes. Use 24-hour "HH:MM". If the source gives no hours, use null — never a guess, because these are checked against the itinerary and a wrong window would flag a plan that is fine, or clear one that is not.
 
 Also summarise the source in one or two sentences for the user's reference, and list any dates, seasons, or durations the source mentions that would affect trip planning.`;
 
@@ -62,6 +63,15 @@ export const ExtractionSchema = z.object({
       area: z.string().nullable(),
       why: z.string().nullable(),
       tags: z.array(z.string()),
+      hours: z
+        .array(
+          z.object({
+            days: z.array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])),
+            opens: z.string(),
+            closes: z.string(),
+          }),
+        )
+        .nullable(),
     }),
   ),
 });
@@ -93,6 +103,7 @@ const EXTRACTION_JSON_SCHEMA = {
           'area',
           'why',
           'tags',
+          'hours',
         ],
         properties: {
           name: { type: 'string' },
@@ -109,6 +120,24 @@ const EXTRACTION_JSON_SCHEMA = {
           },
           why: { type: ['string', 'null'] },
           tags: { type: 'array', items: { type: 'string' } },
+          hours: {
+            type: ['array', 'null'],
+            description:
+              'Opening hours, only when the source states them. One entry per distinct set of times. A weekday absent from every entry means closed that day.',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['days', 'opens', 'closes'],
+              properties: {
+                days: {
+                  type: 'array',
+                  items: { type: 'string', enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] },
+                },
+                opens: { type: 'string', description: '24-hour "HH:MM".' },
+                closes: { type: 'string', description: '24-hour "HH:MM".' },
+              },
+            },
+          },
         },
       },
     },

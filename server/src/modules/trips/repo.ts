@@ -63,6 +63,9 @@ export function rowToPlace(r: Row): Place {
     google_place_id: (r.google_place_id as string) ?? null,
     why: (r.why as string) ?? null,
     tags: fromJson<string[]>(r.tags, []),
+    // Left as the stored text, not parsed here: `parseHours` is the one place
+    // that decides what counts as readable hours.
+    hours: (r.hours as string) ?? null,
     resolved: Boolean(r.resolved),
     created_at: r.created_at as string,
   };

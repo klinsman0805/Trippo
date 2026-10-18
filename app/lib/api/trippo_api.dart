@@ -372,6 +372,18 @@ class TrippoApi {
     );
   }
 
+  /// Stops the plan has timed for when the place is shut.
+  ///
+  /// Cheap — it compares stored hours against the plan and calls nothing
+  /// outside — so it is asked for on every plan load rather than cached.
+  Future<List<PlanClosure>> planClosures(String tripId) async {
+    final json = await _client.get('/trips/$tripId/plan/closures');
+    return [
+      for (final c in json['closures'] as List? ?? const [])
+        PlanClosure.fromJson(c as Map<String, dynamic>),
+    ];
+  }
+
   /// Where each of one day's activities is, for the map. Same timeout as
   /// [travelLegs]: a cold day geocodes every stop through a free service.
   Future<DayPoints> dayPoints(String tripId, int day) async {

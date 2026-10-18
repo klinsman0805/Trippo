@@ -199,6 +199,57 @@ class WayfareController extends ChangeNotifier {
         : day.blocks.where((b) => !b.optional).toList();
   }
 
+  // --- stops timed for when the place is shut ---
+
+  /// What the server found, or empty — which means "nothing we can check is
+  /// wrong", not "everything is fine": only stops that resolved to a saved
+  /// place with recorded hours are ever checked.
+  List<PlanClosure> closures = const [];
+
+  String? _closuresSignature;
+  bool _closuresInFlight = false;
+
+  /// What the check depends on: which stop sits at what time, on which day.
+  /// Moving or retiming anything changes this, and the answer is fetched
+  /// again — which beats invalidating a cache by hand in every edit path.
+  String? _planTiming() {
+    final current = plan;
+    if (current == null) return null;
+    return [
+      for (final day in current.itinerary)
+        for (final block in day.blocks) '${day.day}:${block.id}:${block.startTime ?? ''}',
+    ].join('|');
+  }
+
+  /// Asked for on build, like the travel legs. Cheap on the server — stored
+  /// hours against the plan, nothing external — so it is re-asked whenever the
+  /// timing changes rather than cached.
+  void ensureClosures() {
+    final timing = _planTiming();
+    if (timing == null || _closuresInFlight || timing == _closuresSignature) return;
+    _closuresSignature = timing;
+    _closuresInFlight = true;
+    _fetchClosures();
+  }
+
+  Future<void> _fetchClosures() async {
+    try {
+      final found = await _api.planClosures(tripId);
+      if (_disposed) return;
+      closures = found;
+      notifyListeners();
+    } on ApiException {
+      // A plan that renders without the check beats no plan at all. The next
+      // edit asks again.
+      if (!_disposed) closures = const [];
+    } finally {
+      _closuresInFlight = false;
+    }
+  }
+
+  List<PlanClosure> closuresFor(num day) =>
+      closures.where((c) => c.day == day).toList(growable: false);
+
   // --- travel between activities ---
 
   /// Legs fetched so far, keyed by [_legKey].
@@ -416,6 +467,8 @@ class WayfareController extends ChangeNotifier {
     _legsRequested.removeWhere((key) => !_legs.containsKey(key));
     _pointsRequested.removeWhere((key) => !_points.containsKey(key));
     _pointsFailed.clear();
+    // A deliberate reload re-asks, including after a failure.
+    _closuresSignature = null;
     notifyListeners();
     try {
       trip = await _api.getTrip(tripId);

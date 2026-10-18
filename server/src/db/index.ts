@@ -309,6 +309,16 @@ const MIGRATIONS: string[] = [
   ALTER TABLE geo_lookups               ENABLE ROW LEVEL SECURITY;
   ALTER TABLE travel_legs               ENABLE ROW LEVEL SECURITY;
   `,
+
+  // 2 — when a place is open, as the source stated it.
+  //
+  // JSON, like `tags` beside it: a list of windows, each naming the weekdays
+  // it covers and the clock times it runs between. Null for the places nobody
+  // recorded hours for, which is most of them — the check stays quiet rather
+  // than guessing.
+  `
+  ALTER TABLE places ADD COLUMN hours TEXT;
+  `,
 ];
 
 /**

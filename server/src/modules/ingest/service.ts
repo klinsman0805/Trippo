@@ -170,6 +170,7 @@ async function finishImport(
     country: p.country,
     why: p.why,
     tags: [...p.tags, ...(p.area ? [p.area] : [])],
+    hours: p.hours?.length ? JSON.stringify(p.hours) : null,
     source_id: sourceId,
     resolved: false,
   }));

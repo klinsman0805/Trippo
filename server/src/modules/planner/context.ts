@@ -1,6 +1,7 @@
 import type { Place, Trip } from '../../schemas/trip.js';
 import { deriveTripEnvelope, envelopeInstructions } from '../flights/envelope.js';
 import type { StoredSelection } from '../flights/index.js';
+import { parseHours, type OpeningHours, type Weekday } from './hours.js';
 
 /**
  * Assemble the user turn: everything the planner knows about this trip.
@@ -32,6 +33,7 @@ export function buildPlannerContext(
         [
           'These came from posts, guides and reviews the members saved. Treat them as expressed interest — prefer them over generic attractions, but drop any that do not fit the schedule, budget or a member constraint, and say so in the summary.',
           'Each is prefixed with a tag in square brackets. When a block you write uses one of these places, set that block\'s `from_place` to the tag exactly as written, e.g. "p3". Leave `from_place` null for anything you chose yourself — a wrong tag is worse than none, because the traveller is shown which of their own links an activity came from.',
+        'Where a place shows OPEN hours, those came from the source and are checked against your `start_time` after you answer. Schedule it inside them or leave it out — a stop timed when the place is shut is reported to the traveller as an error, not a warning.',
           '',
           ...placeBlock,
         ],
@@ -169,10 +171,14 @@ function placeLines(places: Place[]): string[] {
   for (const [city, group] of byCity) {
     lines.push(`### ${city}`);
     for (const p of group) {
+      const hours = parseHours(p.hours);
       const bits = [
         p.category ? `[${p.category}]` : null,
         p.address ?? null,
         p.lat != null && p.lng != null ? `(${p.lat.toFixed(4)}, ${p.lng.toFixed(4)})` : null,
+        // Stated before the reason, because it is a constraint rather than
+        // colour: a block scheduled outside these is checked and reported.
+        hours ? `OPEN ${hoursSummary(hours)}` : null,
         p.why ? `— ${p.why}` : null,
       ].filter(Boolean);
       lines.push(`- [${tagOf.get(p.id)}] ${p.name} ${bits.join(' ')}`.trimEnd());
@@ -180,6 +186,29 @@ function placeLines(places: Place[]): string[] {
     lines.push('');
   }
   return lines;
+}
+
+const DAY_LETTERS: Record<Weekday, string> = {
+  mon: 'Mon',
+  tue: 'Tue',
+  wed: 'Wed',
+  thu: 'Thu',
+  fri: 'Fri',
+  sat: 'Sat',
+  sun: 'Sun',
+};
+
+const WEEK: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+/** "daily 10:00-22:00", or "Mon,Tue,Wed 10:00-18:30; Sat,Sun 09:00-18:30". */
+function hoursSummary(hours: OpeningHours): string {
+  return hours
+    .map((w) => {
+      const days = WEEK.filter((d) => w.days.includes(d));
+      const label = days.length === 7 ? 'daily' : days.map((d) => DAY_LETTERS[d]).join(',');
+      return `${label} ${w.opens}-${w.closes}`;
+    })
+    .join('; ');
 }
 
 function nightsBetween(start: string, end: string): number {

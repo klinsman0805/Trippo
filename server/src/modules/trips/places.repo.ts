@@ -14,15 +14,17 @@ export interface PlaceInput {
   google_place_id?: string | null;
   why?: string | null;
   tags?: string[];
+  /** Serialised `OpeningHours`; see the `hours` column. */
+  hours?: string | null;
   source_id?: string | null;
   resolved?: boolean;
 }
 
 const INSERT = `
   INSERT INTO places (id, trip_id, source_id, name, category, city, country, address,
-    lat, lng, google_place_id, why, tags, resolved, created_at)
+    lat, lng, google_place_id, why, tags, hours, resolved, created_at)
   VALUES (@id, @trip_id, @source_id, @name, @category, @city, @country, @address,
-    @lat, @lng, @google_place_id, @why, @tags, @resolved, @created_at)
+    @lat, @lng, @google_place_id, @why, @tags, @hours, @resolved, @created_at)
 `;
 
 export async function addPlace(tripId: string, input: PlaceInput, q: Queryable = db): Promise<Place> {
@@ -41,6 +43,7 @@ export async function addPlace(tripId: string, input: PlaceInput, q: Queryable =
     google_place_id: input.google_place_id ?? null,
     why: input.why ?? null,
     tags: toJson(input.tags ?? []),
+    hours: input.hours ?? null,
     resolved: input.resolved ? 1 : 0,
     created_at: nowIso(),
   });

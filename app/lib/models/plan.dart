@@ -578,3 +578,44 @@ class RefineResult {
     );
   }
 }
+
+/// A stop the plan has timed for when the place is shut.
+///
+/// Checked on the server against the hours the source stated, not guessed
+/// here: the app renders the finding, it does not make it. Only stops that
+/// resolved to a saved place with recorded hours are ever reported, so an
+/// empty list means "nothing we can check is wrong", not "everything is fine".
+class PlanClosure {
+  const PlanClosure({
+    required this.day,
+    required this.blockId,
+    required this.activity,
+    required this.at,
+    required this.note,
+    required this.closedAllDay,
+  });
+
+  final int day;
+  final String blockId;
+  final String activity;
+
+  /// When the stop is scheduled, "HH:MM".
+  final String at;
+
+  /// The finding, ready to read: "ICC Pudu is open 06:00–14:00, but this is
+  /// at 18:00."
+  final String note;
+
+  /// The place does not open at all that day, as against opening at another
+  /// time — a different fix, so worth telling apart.
+  final bool closedAllDay;
+
+  factory PlanClosure.fromJson(Map<String, dynamic> json) => PlanClosure(
+        day: (json['day'] as num?)?.toInt() ?? 0,
+        blockId: json['block_id'] as String? ?? '',
+        activity: json['activity'] as String? ?? '',
+        at: json['at'] as String? ?? '',
+        note: json['note'] as String? ?? '',
+        closedAllDay: json['kind'] == 'closed_that_day',
+      );
+}
