@@ -1,5 +1,5 @@
 import type { Plan } from '../../schemas/plan.js';
-import type { Place } from '../../schemas/trip.js';
+import type { HoursSource, Place } from '../../schemas/trip.js';
 
 /**
  * Whether the plan sends anyone somewhere shut.
@@ -61,6 +61,8 @@ export interface Closure {
   /** When the block is scheduled, "HH:MM". */
   at: string;
   kind: 'closed_that_day' | 'outside_hours';
+  /** Who said so — the note is worded to match. */
+  hours_from: HoursSource;
   /** Rendered on the band, e.g. "ICC Pudu closes at 14:00". */
   note: string;
 }
@@ -128,6 +130,73 @@ export function parseHours(stored: string | null | undefined): OpeningHours | nu
   return windows.length ? windows : null;
 }
 
+/** One point in a Google `regularOpeningHours` period. */
+interface GoogleHourPoint {
+  day?: number;
+  hour?: number;
+  minute?: number;
+}
+
+export interface GooglePeriod {
+  open?: GoogleHourPoint;
+  close?: GoogleHourPoint;
+}
+
+const clock = (hour: number, minute: number) =>
+  `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+
+/**
+ * Google's opening hours, in the shape the rest of this file speaks.
+ *
+ * Google gives one period per day, so a place open 09:00-17:00 all week
+ * arrives as seven of them. They are merged back by time, which keeps the
+ * briefing short — "Mon,Tue,Wed 09:00-17:00" rather than three lines — and
+ * leaves a day the place never opens absent, which is how closed is said here.
+ *
+ * A period with an `open` and no `close` is a day it never shuts. That becomes
+ * 00:00-00:00, which reads as crossing midnight and so covers every minute —
+ * the same answer by the same rule, rather than a special case.
+ */
+export function fromGooglePeriods(periods: GooglePeriod[] | undefined | null): OpeningHours | null {
+  if (!periods?.length) return null;
+
+  const windows: OpeningHours = [];
+  for (const period of periods) {
+    const open = period.open;
+    if (!open || open.day == null) continue;
+    const day = WEEKDAYS[open.day];
+    if (!day) continue;
+    windows.push({
+      days: [day],
+      opens: clock(open.hour ?? 0, open.minute ?? 0),
+      // `close.day` is ignored on purpose: a close on the following day is
+      // exactly what a past-midnight window already means here.
+      closes: period.close ? clock(period.close.hour ?? 0, period.close.minute ?? 0) : '00:00',
+    });
+  }
+  return windows.length ? mergeByTimes(windows) : null;
+}
+
+const WEEK_ORDER: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+/** Windows that run at the same times become one, listed in week order. */
+function mergeByTimes(windows: OpeningHours): OpeningHours {
+  const byTimes = new Map<string, HoursWindow>();
+  for (const w of windows) {
+    const key = `${w.opens}-${w.closes}`;
+    const found = byTimes.get(key);
+    if (found) {
+      for (const day of w.days) if (!found.days.includes(day)) found.days.push(day);
+    } else {
+      byTimes.set(key, { days: [...w.days], opens: w.opens, closes: w.closes });
+    }
+  }
+  return [...byTimes.values()].map((w) => ({
+    ...w,
+    days: WEEK_ORDER.filter((d) => w.days.includes(d)),
+  }));
+}
+
 /** How a place's hours read on one day, for the band's second line. */
 export function describeHours(hours: OpeningHours, day: Weekday): string {
   const windows = windowsOn(hours, day);
@@ -162,6 +231,13 @@ export function findClosures(plan: Plan, places: Place[]): Closure[] {
       const windows = windowsOn(hours, weekday);
       if (windows.length && windows.some((w) => covers(w, at))) continue;
 
+      // Hours read off a post are the poster's claim, and a real import proved
+      // those can be wrong — a KL note had REXKL closed Mondays when it is the
+      // bookshop inside that closes. So a finding built on one says who said
+      // it, and only a finding built on the Places API states it flatly.
+      const from: HoursSource = place.hours_source ?? 'source';
+      const said = from === 'source' ? 'The post says ' : '';
+
       closures.push({
         day: day.day,
         date: day.date,
@@ -170,9 +246,10 @@ export function findClosures(plan: Plan, places: Place[]): Closure[] {
         place_id: place.id,
         at: block.start_time,
         kind: windows.length ? 'outside_hours' : 'closed_that_day',
+        hours_from: from,
         note: windows.length
-          ? `${place.name} is open ${describeHours(hours, weekday)}, but this is at ${block.start_time}.`
-          : `${place.name} is closed on ${DAY_NAMES[weekday]}.`,
+          ? `${said}${place.name} is open ${describeHours(hours, weekday)}, but this is at ${block.start_time}.`
+          : `${said}${place.name} is closed on ${DAY_NAMES[weekday]}.`,
       });
     }
   }

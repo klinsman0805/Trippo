@@ -76,6 +76,7 @@ export async function placeRoutes(app: FastifyInstance): Promise<void> {
             address: match.address,
             google_place_id: match.place_id,
             city: place.city ?? match.city,
+            hours: match.hours ? JSON.stringify(match.hours) : null,
           }),
         );
       } catch (err) {

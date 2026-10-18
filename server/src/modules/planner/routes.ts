@@ -450,6 +450,11 @@ export async function plannerRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get<{ Params: { id: string } }>('/trips/:id/plan/closures', async (req) => {
     const trip = await getTrip(req.params.id);
+    // Days first. Whether a place is shut depends on which weekday the stop
+    // falls on, and a stored plan keeps the dates it was generated with until
+    // something reconciles them — so moving the trip to a Wednesday and asking
+    // this route answered for the old Saturday, and said everything was fine.
+    await reconcileDays(trip.id);
     const record = await getLatestPlan(trip.id);
     if (!record) throw notFound('no_plan_yet', 'This trip has no plan yet.');
     return { closures: findClosures(record.plan, await listPlaces(trip.id)) };

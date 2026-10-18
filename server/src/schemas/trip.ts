@@ -59,6 +59,16 @@ export interface Trip {
   members: Member[];
 }
 
+/**
+ * Who said when a place is open.
+ *
+ * `source` is the post the traveller saved — what they were told, which a real
+ * KL import proved can be wrong: it had REXKL closed Mondays when it is the
+ * bookshop inside that closes, and Beryl's hours an hour and a half out.
+ * `places` is the Places API, which is authoritative enough to state plainly.
+ */
+export type HoursSource = 'source' | 'places';
+
 export interface Place {
   id: string;
   trip_id: string;
@@ -74,11 +84,13 @@ export interface Place {
   why: string | null;
   tags: string[];
   /**
-   * Opening hours as the source gave them, JSON per `OpeningHours`, or null
-   * when the source said nothing. Read with `parseHours`, never `JSON.parse`:
-   * it comes from a model reading a post, so it is a boundary.
+   * Opening hours, JSON per `OpeningHours`, or null when nobody recorded any.
+   * Read with `parseHours`, never `JSON.parse`: it may have come from a model
+   * reading a post, so it is a boundary.
    */
   hours: string | null;
+  /** Where [hours] came from, which decides how firmly they can be stated. */
+  hours_source: HoursSource | null;
   resolved: boolean;
   created_at: string;
 }

@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Plan, PlanBlock } from '../../schemas/plan.js';
-import type { Place } from '../../schemas/trip.js';
-import { clockToMinutes, findClosures, parseHours, weekdayOf, type OpeningHours } from './hours.js';
+import type { HoursSource, Place } from '../../schemas/trip.js';
+import {
+  clockToMinutes,
+  findClosures,
+  fromGooglePeriods,
+  parseHours,
+  weekdayOf,
+  type OpeningHours,
+} from './hours.js';
 
 // --- fixtures: the KL city walk that found the bug ---
 
@@ -10,7 +17,12 @@ import { clockToMinutes, findClosures, parseHours, weekdayOf, type OpeningHours 
 const SATURDAY = '2026-11-07';
 const MONDAY = '2026-11-09';
 
-const place = (id: string, name: string, hours: OpeningHours | null): Place =>
+const place = (
+  id: string,
+  name: string,
+  hours: OpeningHours | null,
+  hours_source: HoursSource = 'places',
+): Place =>
   ({
     id,
     trip_id: 'trip_1',
@@ -26,6 +38,7 @@ const place = (id: string, name: string, hours: OpeningHours | null): Place =>
     why: null,
     tags: [],
     hours: hours === null ? null : JSON.stringify(hours),
+    hours_source: hours === null ? null : hours_source,
     resolved: false,
     created_at: '2026-10-19T00:00:00.000Z',
   }) satisfies Place;
@@ -86,6 +99,85 @@ describe('reading stored hours', () => {
     assert.equal(weekdayOf(SATURDAY), 'sat');
     assert.equal(weekdayOf(MONDAY), 'mon');
     assert.equal(weekdayOf('not-a-date'), null);
+  });
+});
+
+describe("reading Google's opening hours", () => {
+  /** Google gives one period per day, Sunday = 0. */
+  const period = (day: number, oh: number, om: number, ch: number, cm: number) => ({
+    open: { day, hour: oh, minute: om },
+    close: { day, hour: ch, minute: cm },
+  });
+
+  it('merges the seven periods of an all-week place into one window', () => {
+    const hours = fromGooglePeriods([0, 1, 2, 3, 4, 5, 6].map((d) => period(d, 9, 0, 17, 0)));
+
+    // Seven lines in the briefing for one fact would crowd out the rest of it.
+    assert.deepEqual(hours, [
+      { days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], opens: '09:00', closes: '17:00' },
+    ]);
+  });
+
+  it('keeps different times apart, and lists each in week order', () => {
+    const hours = fromGooglePeriods([
+      period(6, 9, 0, 18, 30), // Saturday
+      period(1, 10, 0, 18, 30), // Monday
+      period(0, 9, 0, 18, 30), // Sunday
+      period(2, 10, 0, 18, 30), // Tuesday
+    ]);
+
+    assert.deepEqual(hours, [
+      { days: ['sat', 'sun'], opens: '09:00', closes: '18:30' },
+      { days: ['mon', 'tue'], opens: '10:00', closes: '18:30' },
+    ]);
+  });
+
+  it('leaves a day the place never opens out entirely', () => {
+    // Which is how "closed Mondays" is said here — no separate field to
+    // disagree with the times.
+    const hours = fromGooglePeriods([1, 2, 3].map((d) => period(d, 10, 0, 22, 0)));
+    assert.deepEqual(hours?.[0]?.days, ['mon', 'tue', 'wed']);
+  });
+
+  it('treats a period with no closing time as never shutting that day', () => {
+    const hours = fromGooglePeriods([{ open: { day: 1, hour: 0, minute: 0 } }]);
+    assert.deepEqual(hours, [{ days: ['mon'], opens: '00:00', closes: '00:00' }]);
+
+    // 2026-11-09 is a Monday; a 24-hour place is open at every hour of it.
+    const open24 = place('plc_24', 'All night mamak', hours);
+    for (const at of ['03:00', '12:00', '23:30']) {
+      assert.deepEqual(findClosures(planWith(MONDAY, [block({ at, place: 'plc_24' })]), [open24]), []);
+    }
+  });
+
+  it('says nothing for a provider that knows no hours', () => {
+    assert.equal(fromGooglePeriods(undefined), null);
+    assert.equal(fromGooglePeriods([]), null);
+    assert.equal(fromGooglePeriods([{ close: { day: 1, hour: 9, minute: 0 } }]), null);
+  });
+});
+
+describe('who said the place was shut', () => {
+  const windows: OpeningHours = [{ days: ['sat'], opens: '06:00', closes: '14:00' }];
+
+  it('states Places hours flatly', () => {
+    const closures = findClosures(
+      planWith(SATURDAY, [block({ at: '18:00', place: 'plc_p' })]),
+      [place('plc_p', 'ICC Pudu', windows, 'places')],
+    );
+    assert.equal(closures[0]?.hours_from, 'places');
+    assert.equal(closures[0]?.note, 'ICC Pudu is open 06:00–14:00, but this is at 18:00.');
+  });
+
+  it("attributes a post's hours to the post", () => {
+    // A KL note had REXKL closed Mondays when it is the bookshop inside that
+    // closes. Hours off a post are a claim, and the wording has to say so.
+    const closures = findClosures(
+      planWith(SATURDAY, [block({ at: '18:00', place: 'plc_s' })]),
+      [place('plc_s', 'ICC Pudu', windows, 'source')],
+    );
+    assert.equal(closures[0]?.hours_from, 'source');
+    assert.equal(closures[0]?.note, 'The post says ICC Pudu is open 06:00–14:00, but this is at 18:00.');
   });
 });
 

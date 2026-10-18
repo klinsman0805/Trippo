@@ -66,6 +66,7 @@ export function rowToPlace(r: Row): Place {
     // Left as the stored text, not parsed here: `parseHours` is the one place
     // that decides what counts as readable hours.
     hours: (r.hours as string) ?? null,
+    hours_source: (r.hours_source as Place['hours_source']) ?? null,
     resolved: Boolean(r.resolved),
     created_at: r.created_at as string,
   };

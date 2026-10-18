@@ -98,6 +98,7 @@ function fakeGeo(table: Record<string, LatLng>): GeoProvider & {
               types: [],
               rating: null,
               maps_uri: null,
+    hours: null,
             },
           ]
         : [];

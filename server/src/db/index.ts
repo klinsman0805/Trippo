@@ -319,6 +319,16 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE places ADD COLUMN hours TEXT;
   `,
+
+  // 3 — who said when the place is open.
+  //
+  // A post's hours are the poster's claim from whenever they wrote, and a real
+  // KL import had two of them wrong. The Places API answers about the business
+  // itself. Both are stored the same way, so the difference has to be recorded
+  // or a finding cannot say how firmly it is meant.
+  `
+  ALTER TABLE places ADD COLUMN hours_source TEXT;
+  `,
 ];
 
 /**

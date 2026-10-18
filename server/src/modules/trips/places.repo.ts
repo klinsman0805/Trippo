@@ -1,6 +1,6 @@
 import { db, newId, nowIso, toJson, type Queryable } from '../../db/index.js';
 import { notFound } from '../../lib/errors.js';
-import type { Place } from '../../schemas/trip.js';
+import type { HoursSource, Place } from '../../schemas/trip.js';
 import { rowToPlace } from './repo.js';
 
 export interface PlaceInput {
@@ -16,15 +16,16 @@ export interface PlaceInput {
   tags?: string[];
   /** Serialised `OpeningHours`; see the `hours` column. */
   hours?: string | null;
+  hours_source?: HoursSource | null;
   source_id?: string | null;
   resolved?: boolean;
 }
 
 const INSERT = `
   INSERT INTO places (id, trip_id, source_id, name, category, city, country, address,
-    lat, lng, google_place_id, why, tags, hours, resolved, created_at)
+    lat, lng, google_place_id, why, tags, hours, hours_source, resolved, created_at)
   VALUES (@id, @trip_id, @source_id, @name, @category, @city, @country, @address,
-    @lat, @lng, @google_place_id, @why, @tags, @hours, @resolved, @created_at)
+    @lat, @lng, @google_place_id, @why, @tags, @hours, @hours_source, @resolved, @created_at)
 `;
 
 export async function addPlace(tripId: string, input: PlaceInput, q: Queryable = db): Promise<Place> {
@@ -44,6 +45,7 @@ export async function addPlace(tripId: string, input: PlaceInput, q: Queryable =
     why: input.why ?? null,
     tags: toJson(input.tags ?? []),
     hours: input.hours ?? null,
+    hours_source: input.hours ? input.hours_source ?? 'source' : null,
     resolved: input.resolved ? 1 : 0,
     created_at: nowIso(),
   });
@@ -96,14 +98,32 @@ export async function deletePlace(tripId: string, id: string): Promise<void> {
   if (changes === 0) throw notFound('place_not_found', `No place with id ${id}`);
 }
 
-/** Attach geocoding results once a place has been resolved against Places API. */
+/**
+ * Attach geocoding results once a place has been resolved against Places API.
+ *
+ * Hours are taken only when the provider gave some, and they replace a post's:
+ * the provider is answering about the business, while the post is one
+ * visitor's note from whenever they wrote it. A provider that knows no hours
+ * leaves whatever the post said alone rather than clearing it — COALESCE
+ * rather than an overwrite — because silence is not a correction.
+ */
 export async function markResolved(
   id: string,
-  data: { lat: number; lng: number; address: string | null; google_place_id: string; city?: string | null },
+  data: {
+    lat: number;
+    lng: number;
+    address: string | null;
+    google_place_id: string;
+    city?: string | null;
+    hours?: string | null;
+  },
 ): Promise<Place> {
   await db.run(
     `UPDATE places SET lat = @lat, lng = @lng, address = @address,
-       google_place_id = @google_place_id, city = COALESCE(@city, city), resolved = 1
+       google_place_id = @google_place_id, city = COALESCE(@city, city),
+       hours = COALESCE(@hours, hours),
+       hours_source = CASE WHEN @hours IS NULL THEN hours_source ELSE 'places' END,
+       resolved = 1
      WHERE id = @id`,
     {
       id,
@@ -112,6 +132,7 @@ export async function markResolved(
       address: data.address,
       google_place_id: data.google_place_id,
       city: data.city ?? null,
+      hours: data.hours ?? null,
     },
   );
   return await getPlace(id);

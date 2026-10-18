@@ -1,3 +1,4 @@
+import type { OpeningHours } from '../planner/hours.js';
 import { z } from 'zod';
 
 /**
@@ -28,6 +29,14 @@ export interface ResolvedPlace {
   rating: number | null;
   /** A link the user can open for hours and reviews. */
   maps_uri: string | null;
+  /**
+   * When the place is open, per the provider, or null when it does not say.
+   *
+   * Preferred over anything a post claimed: the provider is answering about
+   * the business, while a post is one visitor's note from whenever they wrote
+   * it. OSM has nothing reliable here and always returns null.
+   */
+  hours: OpeningHours | null;
 }
 
 export interface TransitStep {

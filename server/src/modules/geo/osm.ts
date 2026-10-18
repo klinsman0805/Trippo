@@ -122,6 +122,9 @@ function toResolvedPlace(feature: {
       osmType && osmId
         ? `https://www.openstreetmap.org/${expandOsmType(osmType)}/${osmId}`
         : null,
+    // Photon's geocoding carries no opening hours. Whatever the source said
+    // stands, rather than being cleared by a lookup that never knew.
+    hours: null,
   };
 }
 

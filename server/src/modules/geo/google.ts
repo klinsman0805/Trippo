@@ -1,4 +1,5 @@
 import { env } from '../../config/env.js';
+import { fromGooglePeriods, type GooglePeriod } from '../planner/hours.js';
 import { TtlCache } from '../../lib/cache.js';
 import { fetchWithRetry, jsonOrThrow } from '../../lib/http.js';
 import type {
@@ -34,6 +35,9 @@ const SEARCH_FIELDS = [
   'places.rating',
   'places.googleMapsUri',
   'places.addressComponents',
+  // Billed in a higher Places SKU than the fields above it. Worth it: the one
+  // fact a saved post most often gets wrong is when the place is open.
+  'places.regularOpeningHours',
 ].join(',');
 
 const ROUTE_FIELDS = [
@@ -163,6 +167,7 @@ function toResolvedPlace(p: GooglePlace): ResolvedPlace {
     types: p.types ?? [],
     rating: p.rating ?? null,
     maps_uri: p.googleMapsUri ?? null,
+    hours: fromGooglePeriods(p.regularOpeningHours?.periods),
   };
 }
 
@@ -203,6 +208,7 @@ interface GooglePlace {
   rating?: number;
   googleMapsUri?: string;
   addressComponents?: { longText?: string; types?: string[] }[];
+  regularOpeningHours?: { periods?: GooglePeriod[] };
 }
 
 interface GoogleRoute {
