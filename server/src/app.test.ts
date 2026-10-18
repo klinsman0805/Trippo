@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
+import { requireNoModelKey } from './test-support.js';
 
 /**
  * The whole API, through HTTP, against a real Postgres.
@@ -15,6 +16,7 @@ import type { FastifyInstance } from 'fastify';
 let app: FastifyInstance;
 
 before(async () => {
+  requireNoModelKey();
   const { buildApp } = await import('./app.js');
   app = await buildApp();
 });

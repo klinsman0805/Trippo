@@ -3,6 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 import { supabaseVerifier } from './lib/auth.js';
+import { requireNoModelKey } from './test-support.js';
 
 /**
  * Two people, each trying every way the API offers to reach the other's trip.
@@ -19,6 +20,7 @@ let app: FastifyInstance;
 let sign: (claims: Record<string, unknown>, opts?: { issuer?: string; expires?: string }) => Promise<string>;
 
 before(async () => {
+  requireNoModelKey();
   const { publicKey, privateKey } = await generateKeyPair('ES256');
   const jwk: JWK = { ...(await exportJWK(publicKey)), kid: 'test', alg: 'ES256' };
   sign = (claims, opts = {}) =>
