@@ -19,12 +19,30 @@ class _FakeSession extends Fake implements Session {
   bool get isExpired => expired;
 }
 
+/// How a refresh fails — and, just as importantly, what the real client does
+/// with the session on its way out.
+enum _RefreshFailure {
+  /// The network, or a 5xx. GoTrueClient keeps the session and rethrows.
+  retryable,
+
+  /// The refresh token is dead. GoTrueClient drops the session before it
+  /// throws, which is why the fake below does too: without that it was
+  /// modelling a client that does not exist, and the difference between these
+  /// two cases is the whole point of [AppSession.refresh].
+  refused,
+}
+
 /// Counts sign-ins, and can be made slow, so overlapping callers overlap.
+///
+/// `signOut` is deliberately not implemented: [Fake] throws on anything it
+/// does not override, so a session that signs out on the way to a refresh
+/// fails loudly here. Retiring an anonymous user is unrecoverable, and this is
+/// the tripwire that says so.
 class _FakeAuth extends Fake implements GoTrueClient {
   Session? session;
   int signIns = 0;
   int refreshes = 0;
-  bool refreshFails = false;
+  _RefreshFailure? refreshFailure;
   Completer<void>? gate;
 
   @override
@@ -44,14 +62,16 @@ class _FakeAuth extends Fake implements GoTrueClient {
   @override
   Future<AuthResponse> refreshSession([String? refreshToken]) async {
     refreshes++;
-    if (refreshFails) throw const AuthException('refresh token revoked');
-    session = _FakeSession('refreshed-$refreshes');
-    return AuthResponse();
-  }
-
-  @override
-  Future<void> signOut({SignOutScope scope = SignOutScope.local}) async {
-    session = null;
+    switch (refreshFailure) {
+      case _RefreshFailure.retryable:
+        throw AuthRetryableFetchException(message: 'connection closed');
+      case _RefreshFailure.refused:
+        session = null;
+        throw const AuthException('refresh token revoked');
+      case null:
+        session = _FakeSession('refreshed-$refreshes');
+        return AuthResponse();
+    }
   }
 }
 
@@ -82,12 +102,28 @@ void main() {
         () async {
       final auth = _FakeAuth()
         ..session = _FakeSession('old')
-        ..refreshFails = true;
+        ..refreshFailure = _RefreshFailure.refused;
 
       await AppSession.withAuth(auth).refresh();
 
       expect(auth.signIns, 1);
       expect(auth.session?.accessToken, 'anon-token-1');
+    });
+
+    test('a refresh the network ate keeps the user it already has', () async {
+      final auth = _FakeAuth()
+        ..session = _FakeSession('old')
+        ..refreshFailure = _RefreshFailure.retryable;
+
+      await AppSession.withAuth(auth).refresh();
+
+      // This used to sign out and sign in again, which for an anonymous user
+      // is not starting over — it is abandoning one. The old user has no
+      // credentials to sign back in with, so its trips keep an owner that no
+      // token will ever name again. A dropped connection must not cost
+      // somebody their trips.
+      expect(auth.signIns, 0);
+      expect(auth.session?.accessToken, 'old');
     });
   });
 

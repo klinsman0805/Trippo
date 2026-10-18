@@ -58,13 +58,34 @@ class AppSession {
   }
 
   /// A fresh token, after the server turned one away.
+  ///
+  /// Which failure it was decides everything here, because retiring an
+  /// anonymous user is irreversible: it has no credentials, so nobody can ever
+  /// sign in as it again, and every trip it owns stays in the database under an
+  /// `owner_id` no future token will carry. Unreachable, undeletable, gone.
   Future<void> refresh() async {
     try {
       await _auth.refreshSession();
+    } on AuthRetryableFetchException {
+      // The network failed, not the token. The session is still good — the SDK
+      // keeps it in this case — so this does nothing and leaves it alone. The
+      // request that asked for the refresh goes on to fail as it was already
+      // going to, and the next one retries with the user intact.
+      //
+      // Swallowed rather than rethrown: an AuthException out of here would
+      // escape ApiClient._send, which only promises ApiException, and no
+      // caller would catch it. The retry answers 401 again and that path
+      // reports it properly.
     } on AuthException {
-      // A refresh token can itself be revoked or expired; start over as a new
-      // anonymous user rather than leave the app unable to sign in at all.
-      await _auth.signOut();
+      // The refresh token itself is dead — revoked, or reused and detected.
+      // The SDK has already dropped the session, so there is nothing to sign
+      // out of, and a new anonymous user is the only way back to an app that
+      // works at all.
+      //
+      // It is still a one-way door, by the nature of an anonymous account: the
+      // previous user's trips are now unreachable. Linking a real identity is
+      // what closes it, because a linked user can always sign back in. Until
+      // then this is the worst case, not a handled one.
       await _ensureSignedIn();
     }
   }
