@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { badRequest } from '../../lib/errors.js';
-import { attribution, geoProvider } from '../geo/index.js';
+import { attribution, geoProvider, isVisitable } from '../geo/index.js';
 import { listPlaces, markResolved } from '../trips/places.repo.js';
 import { getTrip } from '../trips/repo.js';
 
@@ -67,6 +67,14 @@ export async function placeRoutes(app: FastifyInstance): Promise<void> {
         const [match] = await provider.search(query, { bias, limit: 1 });
         if (!match) {
           failed.push({ id: place.id, name: place.name, reason: 'no_match' });
+          continue;
+        }
+        // A road is a plausible answer to any query, and storing one would
+        // pin a beach's name to a street's coordinates and still call it
+        // resolved. Unresolved is the honest state for a place the provider
+        // does not actually list.
+        if (!isVisitable(match.types)) {
+          failed.push({ id: place.id, name: place.name, reason: 'not_a_place' });
           continue;
         }
         resolved.push(
