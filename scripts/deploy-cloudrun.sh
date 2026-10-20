@@ -58,6 +58,8 @@ ensure_secret trippo-database-url \
 ensure_secret trippo-gemini-key "Gemini API key" required
 ensure_secret trippo-aerodatabox-key \
   "AeroDataBox key, for looking up booked flights by number (Enter to skip)" optional
+ensure_secret trippo-google-maps-key \
+  "Google Maps API key, for real venue names and published opening hours (Enter to skip)" optional
 
 # Cloud Run runs as the project's default compute service account; it may
 # read these secrets and nothing else in Secret Manager.
@@ -65,12 +67,26 @@ project_number="$(gcloud projects describe "$PROJECT_ID" --format='value(project
 runtime_sa="${project_number}-compute@developer.gserviceaccount.com"
 
 secrets="DATABASE_URL=trippo-database-url:latest,GEMINI_API_KEY=trippo-gemini-key:latest"
-env_vars="SUPABASE_URL=${SUPABASE_URL},MAPS_PROVIDER=osm"
+env_vars="SUPABASE_URL=${SUPABASE_URL}"
 granted=(trippo-database-url trippo-gemini-key)
 if gcloud secrets describe trippo-aerodatabox-key >/dev/null 2>&1; then
   secrets+=",AERODATABOX_API_KEY=trippo-aerodatabox-key:latest"
   env_vars+=",SCHEDULE_PROVIDER=aerodatabox"
   granted+=(trippo-aerodatabox-key)
+fi
+# Geocoding follows the key, the way the schedule provider follows its own.
+#
+# Photon is free and needs nothing, which is why it is the fallback — but it
+# could not find six of nine Balik Pulau places and put three of the rest in
+# George Town, 25km away. Places finds them, and publishes the opening hours
+# the plan is checked against. It is billed per call, so it turns on only when
+# the key is there to turn it on.
+if gcloud secrets describe trippo-google-maps-key >/dev/null 2>&1; then
+  secrets+=",GOOGLE_MAPS_API_KEY=trippo-google-maps-key:latest"
+  env_vars+=",MAPS_PROVIDER=google"
+  granted+=(trippo-google-maps-key)
+else
+  env_vars+=",MAPS_PROVIDER=osm"
 fi
 for name in "${granted[@]}"; do
   gcloud secrets add-iam-policy-binding "$name" \
