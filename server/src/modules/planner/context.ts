@@ -1,7 +1,7 @@
 import type { Place, Trip } from '../../schemas/trip.js';
 import { deriveTripEnvelope, envelopeInstructions } from '../flights/envelope.js';
 import type { StoredSelection } from '../flights/index.js';
-import { parseHours, type OpeningHours, type Weekday } from './hours.js';
+import { closedByDay, parseHours, type OpeningHours, type Weekday } from './hours.js';
 
 /**
  * Assemble the user turn: everything the planner knows about this trip.
@@ -40,6 +40,9 @@ export function buildPlannerContext(
       ),
     );
   }
+
+  const shut = shutLines(trip, places);
+  if (shut.length) sections.push(section('CLOSED ON THESE DAYS', shut));
 
   sections.push(
     section('YOUR TASK', [
@@ -186,6 +189,57 @@ function placeLines(places: Place[]): string[] {
     lines.push('');
   }
   return lines;
+}
+
+/** Every date the trip covers, inclusive, or empty when it has no dates. */
+function tripDates(start: string | null, end: string | null): string[] {
+  if (!start || !end) return [];
+  const from = Date.parse(`${start}T00:00:00Z`);
+  const to = Date.parse(`${end}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to) || to < from) return [];
+
+  const dates: string[] = [];
+  for (let t = from; t <= to && dates.length < 60; t += 86_400_000) {
+    dates.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Wed 4 Nov" — the day a traveller would say, not an ISO date. */
+function readableDate(date: string): string {
+  const at = new Date(`${date}T00:00:00Z`);
+  const weekday = DAY_LETTERS[(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as Weekday[])[at.getUTCDay()]!];
+  return `${weekday} ${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]}`;
+}
+
+/**
+ * The days each saved place cannot be visited at all, named by tag.
+ *
+ * Stated rather than implied, because the alternative is asking the model to
+ * turn a date into a weekday and check it against every place's hours before
+ * it writes anything — arithmetic it can do, and quietly get wrong, in a way
+ * the finished plan would not show.
+ */
+function shutLines(trip: Trip, places: Place[]): string[] {
+  const dates = tripDates(trip.start_date, trip.end_date);
+  const byDay = closedByDay(places, dates);
+  if (!byDay.length) return [];
+
+  const tagOf = (i: number) => placeTag(i);
+  const lines = byDay.map((day) => {
+    const names = day.closed.map((i) => `[${tagOf(i)}] ${places[i]!.name}`).join(', ');
+    return `- Day ${dates.indexOf(day.date) + 1}, ${readableDate(day.date)}: ${names}`;
+  });
+
+  return [
+    'Worked out from the hours above and this trip\'s dates. Take it as given rather than deriving it again.',
+    '',
+    ...lines,
+    '',
+    'Do not place these on the day named. Leaving a saved place out is fine — the traveller is shown what was left out and why — but scheduling one for a day it is shut is not.',
+  ];
 }
 
 const DAY_LETTERS: Record<Weekday, string> = {

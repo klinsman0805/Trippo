@@ -4,6 +4,7 @@ import type { Plan, PlanBlock } from '../../schemas/plan.js';
 import type { HoursSource, Place } from '../../schemas/trip.js';
 import {
   clockToMinutes,
+  closedByDay,
   findClosures,
   fromGooglePeriods,
   parseHours,
@@ -252,6 +253,45 @@ describe('catching a stop timed when the place is shut', () => {
       [iccPudu],
     );
     assert.deepEqual(closures.map((c) => c.activity), ['late one', 'later one']);
+  });
+});
+
+describe('telling the planner which days a place cannot be visited', () => {
+  // The real Balik Pulau guide: three places, three different closed days.
+  const ahHuat = place('plc_ah', 'Ah Huat Uncle Fried Hor Fun', [
+    { days: ['mon', 'tue', 'thu', 'fri', 'sat', 'sun'], opens: '08:00', closes: '15:00' },
+  ]);
+  const nada = place('plc_nada', 'Nada Natural Farming', [
+    { days: ['thu', 'fri'], opens: '16:30', closes: '20:30' },
+    { days: ['sat', 'sun'], opens: '15:00', closes: '21:00' },
+  ]);
+  const anytime = place('plc_any', 'Lian Cheng Water Powder Factory', [
+    { days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], opens: '09:00', closes: '18:00' },
+  ]);
+  const places = [ahHuat, nada, anytime];
+
+  /** 2026-11-04 is a Wednesday, 11-05 a Thursday, 11-07 a Saturday. */
+  it('names the places shut on each day, by their position in the list', () => {
+    const byDay = closedByDay(places, ['2026-11-04', '2026-11-05']);
+
+    assert.equal(byDay.length, 1, 'only Wednesday has closures');
+    assert.equal(byDay[0]?.date, '2026-11-04');
+    assert.equal(byDay[0]?.weekday, 'wed');
+    // Ah Huat closes Wednesdays; Nada opens Thursday to Sunday only.
+    assert.deepEqual(byDay[0]?.closed, [0, 1]);
+  });
+
+  it('says nothing about a day everything is open', () => {
+    assert.deepEqual(closedByDay(places, ['2026-11-07']), []);
+  });
+
+  it('ignores places whose hours nobody recorded', () => {
+    const unknown = place('plc_u', 'Pantai Malindo', null);
+    assert.deepEqual(closedByDay([unknown], ['2026-11-04']), []);
+  });
+
+  it('skips a date it cannot read rather than guessing at it', () => {
+    assert.deepEqual(closedByDay(places, ['not-a-date']), []);
   });
 });
 

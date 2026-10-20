@@ -204,6 +204,48 @@ export function describeHours(hours: OpeningHours, day: Weekday): string {
   return windows.map((w) => `${w.opens}–${w.closes}`).join(', ');
 }
 
+export interface DayClosures {
+  date: string;
+  weekday: Weekday;
+  /** Indexes into the places array as given, so the caller can name them. */
+  closed: number[];
+}
+
+/**
+ * Which saved places are shut on each day of the trip.
+ *
+ * Worked out here and handed to the planner, rather than left for it to
+ * derive. It would have to turn a date into a weekday and check that against
+ * seven windows per place, for every place, before writing anything — and a
+ * model that gets one of those steps wrong produces a plan that looks right.
+ *
+ * This is the flight envelope's rule applied to hours: a day a place cannot
+ * be visited should reduce what gets planned, not collect a warning on top of
+ * it. The check after the fact stays, for the edits that come later.
+ *
+ * Only whole days. "Open, but not at that hour" is already answered by the
+ * hours shown beside each place.
+ */
+export function closedByDay(places: Place[], dates: string[]): DayClosures[] {
+  const found: DayClosures[] = [];
+
+  for (const date of dates) {
+    const weekday = weekdayOf(date);
+    if (!weekday) continue;
+
+    const closed: number[] = [];
+    places.forEach((place, index) => {
+      const hours = parseHours(place.hours);
+      if (!hours) return;
+      if (!hours.some((w) => w.days.includes(weekday))) closed.push(index);
+    });
+
+    if (closed.length) found.push({ date, weekday, closed });
+  }
+
+  return found;
+}
+
 /**
  * Every block scheduled when the place it cites is shut.
  *
