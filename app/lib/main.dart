@@ -19,13 +19,17 @@ Future<void> main() async {
       refreshSession: session?.refresh,
     ),
   );
-  runApp(TrippoApp(api: api));
+  runApp(TrippoApp(api: api, session: session));
 }
 
 class TrippoApp extends StatelessWidget {
-  const TrippoApp({super.key, required this.api, this.platformOverride});
+  const TrippoApp({super.key, required this.api, this.session, this.platformOverride});
 
   final TrippoApi api;
+
+  /// Null when the app is built without Supabase — against a local server
+  /// that does not ask who you are, there is no account to keep.
+  final AppSession? session;
 
   /// Forces an iOS or Android dress. Null follows the host OS — set this to
   /// preview the other platform without changing devices.
@@ -70,6 +74,7 @@ class TrippoApp extends StatelessWidget {
           // The design covers a single trip; picking which trip happens before
           // the shell, which the handoff doesn't specify either way.
           : TripListScreen(
+              session: session,
               api: api,
               onOpenTrip: (context, tripId) => Navigator.of(context).push(
                 MaterialPageRoute<void>(

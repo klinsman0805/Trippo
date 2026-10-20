@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../api/trippo_api.dart';
+import '../auth/session.dart';
 import '../design/features.dart';
 import '../design/theme.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../models/trip.dart';
 import '../state/trip_repository.dart';
+import 'account_sheet.dart';
 import 'wayfare/currency_picker.dart';
 import 'wayfare/formatting.dart';
 
@@ -19,10 +21,14 @@ class TripListScreen extends StatefulWidget {
   const TripListScreen({
     super.key,
     required this.api,
+    this.session,
     required this.onOpenTrip,
   });
 
   final TrippoApi api;
+
+  /// Null without Supabase, which is when there is no account to offer.
+  final AppSession? session;
   final void Function(BuildContext context, String tripId) onOpenTrip;
 
   @override
@@ -127,6 +133,14 @@ class _TripListScreenState extends State<TripListScreen> {
                 ],
               ),
             ),
+            if (widget.session case final session?)
+              _AccountRow(
+                session: session,
+                api: widget.api,
+                // Signing in on a second device swaps which trips are yours,
+                // and linking moves nothing — either way the list is stale.
+                onChanged: _repo.load,
+              ),
             _FeatureNotice(repo: _repo),
             Expanded(child: _body()),
           ],
@@ -458,6 +472,94 @@ class _FeatureNotice extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+
+/// Who these trips belong to, and the way to change the answer.
+///
+/// Reads as a statement rather than a prompt while there is no account: the
+/// first trip needs no sign-up, and a banner demanding one on the way in
+/// would take that back. It says what is true — these live on this phone —
+/// and leaves the rest to somebody who cares.
+class _AccountRow extends StatefulWidget {
+  const _AccountRow({
+    required this.session,
+    required this.api,
+    required this.onChanged,
+  });
+
+  final AppSession session;
+  final TrippoApi api;
+  final VoidCallback onChanged;
+
+  @override
+  State<_AccountRow> createState() => _AccountRowState();
+}
+
+class _AccountRowState extends State<_AccountRow> {
+  @override
+  Widget build(BuildContext context) {
+    final theme = WayfareTheme.of(context);
+    final email = widget.session.email;
+    final signedIn = email != null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: Material(
+        color: WayfareColors.surfaceAlt,
+        shape: RoundedRectangleBorder(
+          borderRadius: theme.cardLg,
+          side: const BorderSide(color: WayfareColors.hairline),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: signedIn
+              ? null
+              : () async {
+                  await showAccountSheet(
+                    context,
+                    session: widget.session,
+                    api: widget.api,
+                    onChanged: widget.onChanged,
+                  );
+                  if (mounted) setState(() {});
+                },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
+            child: Row(
+              children: [
+                Icon(
+                  signedIn ? Icons.check_circle_outline : Icons.phone_iphone,
+                  size: 17,
+                  color: signedIn ? WayfareColors.success : WayfareColors.inkSecondary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    signedIn ? email : 'These trips live on this phone only',
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      height: 1.3,
+                      color: WayfareColors.inkSecondary,
+                    ),
+                  ),
+                ),
+                if (!signedIn)
+                  const Text(
+                    'Keep them',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: WayfareColors.accent,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
