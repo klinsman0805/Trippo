@@ -14,6 +14,7 @@ import { placeRoutes } from './modules/places/routes.js';
 import { plannerRoutes } from './modules/planner/routes.js';
 import { transitRoutes } from './modules/transit/routes.js';
 import { travelRoutes } from './modules/travel/routes.js';
+import { accountRoutes } from './modules/account/routes.js';
 import { tripRoutes } from './modules/trips/routes.js';
 
 declare module 'fastify' {
@@ -37,6 +38,8 @@ const LIMITS: { path: RegExp; method?: string; max: number; timeWindow: string }
   { path: /\/(plan\/travel|points)$/, max: 300, timeWindow: '1 hour' },
   { path: /\/(transit\/|places\/search|places\/resolve)/, max: 120, timeWindow: '1 hour' },
   { path: /\/flights\//, max: 60, timeWindow: '1 hour' },
+  // Claiming a device's anonymous trips happens once on that device, ever.
+  { path: /\/account\/transfer$/, method: 'POST', max: 10, timeWindow: '1 hour' },
 ];
 const DEFAULT_LIMIT = { max: 300, timeWindow: '1 minute' };
 
@@ -203,6 +206,9 @@ export async function buildApp(verify: Verifier = callerVerifier()): Promise<Fas
           ),
       });
 
+      // Takes the verifier, because it has to check a second token: the one
+      // belonging to the anonymous user whose trips are being claimed.
+      await api.register(accountRoutes(verify));
       await api.register(tripRoutes);
       await api.register(ingestRoutes);
       await api.register(placeRoutes);

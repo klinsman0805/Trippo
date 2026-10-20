@@ -215,6 +215,93 @@ describe('how often', () => {
   });
 });
 
+describe('moving trips off the anonymous user a device started with', () => {
+  it("takes an anonymous device's trips, and leaves it with none", async () => {
+    const device = await as('transfer-anon', true);
+    const me = await as('transfer-me');
+
+    const trip = (await call(device, 'POST', '/v1/trips', { title: 'Planned before signing in' })).body
+      .trip.id;
+
+    const res = await call(me, 'POST', '/v1/account/transfer', {
+      from_access_token: device,
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.moved, 1);
+
+    // The trip answers to its new owner, and the old one is a stranger to it.
+    assert.equal((await call(me, 'GET', `/v1/trips/${trip}`)).status, 200);
+    assert.equal((await call(device, 'GET', `/v1/trips/${trip}`)).status, 404);
+  });
+
+  it('moves nothing belonging to anybody else', async () => {
+    const device = await as('transfer-anon-2', true);
+    const bystander = await as('transfer-bystander');
+    const me = await as('transfer-me-2');
+
+    const theirs = (await call(bystander, 'POST', '/v1/trips', { title: 'Not yours' })).body.trip.id;
+    await call(device, 'POST', '/v1/trips', { title: 'Mine' });
+
+    assert.equal(
+      (await call(me, 'POST', '/v1/account/transfer', { from_access_token: device })).body.moved,
+      1,
+    );
+    // Untouched, and still theirs.
+    assert.equal((await call(bystander, 'GET', `/v1/trips/${theirs}`)).status, 200);
+    assert.equal((await call(me, 'GET', `/v1/trips/${theirs}`)).status, 404);
+  });
+
+  it('will not empty a real account, only an anonymous one', async () => {
+    // The restriction the whole design rests on: possession of a token is
+    // proof enough for a device's own throwaway user, and nowhere near
+    // enough for somebody's account.
+    const victim = await as('transfer-victim');
+    const trip = (await call(victim, 'POST', '/v1/trips', { title: 'Years of planning' })).body.trip.id;
+
+    const thief = await as('transfer-thief');
+    const res = await call(thief, 'POST', '/v1/account/transfer', { from_access_token: victim });
+
+    assert.equal(res.status, 401);
+    assert.equal(res.body.error.code, 'not_anonymous');
+    assert.equal((await call(victim, 'GET', `/v1/trips/${trip}`)).status, 200);
+  });
+
+  it('turns away a token that is forged, expired or for another project', async () => {
+    const me = await as('transfer-me-3');
+    const bad = [
+      'not-a-jwt-at-all',
+      await sign({ sub: 'ghost', is_anonymous: true }, { expires: '-1m' }),
+      await sign({ sub: 'ghost', is_anonymous: true }, { issuer: 'https://other.supabase.co/auth/v1' }),
+    ];
+    for (const token of bad) {
+      const res = await call(me, 'POST', '/v1/account/transfer', { from_access_token: token });
+      assert.equal(res.status, 401, token.slice(0, 12));
+    }
+  });
+
+  it('is content when there is nothing to do', async () => {
+    // What the device that did the linking sees: the identity attached to the
+    // user it already was, so both tokens name the same person.
+    const me = await as('transfer-me-4');
+    const res = await call(me, 'POST', '/v1/account/transfer', { from_access_token: me });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.moved, 0);
+  });
+
+  it('needs a caller of its own, like every other route', async () => {
+    const device = await as('transfer-anon-3', true);
+    assert.equal(
+      (await call(null, 'POST', '/v1/account/transfer', { from_access_token: device })).status,
+      401,
+    );
+  });
+
+  it('asks for the token it needs', async () => {
+    const me = await as('transfer-me-5');
+    assert.equal((await call(me, 'POST', '/v1/account/transfer', {})).status, 400);
+  });
+});
+
 describe('a project still on a shared secret', () => {
   it('verifies HS256 tokens with it', async () => {
     const secret = 'a-test-secret-that-is-long-enough';
