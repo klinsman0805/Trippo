@@ -9,6 +9,18 @@ import '../config.dart';
 /// the first trip needs no account, and every trip still belongs to someone.
 /// Signing in properly later links an identity to this same user, so nothing
 /// made before then is lost.
+/// What offering an email address turned out to mean.
+enum EmailLink {
+  /// Nobody holds it. A code was sent; confirming keeps this user and gives
+  /// them a way back in — the trips made so far are untouched.
+  linking,
+
+  /// Somebody does, and it is almost always this person on another device.
+  /// A code was sent; confirming signs in as that account, which leaves the
+  /// user this device has been planning as behind.
+  signingIn,
+}
+
 class AppSession {
   AppSession._(this._auth);
 
@@ -89,6 +101,65 @@ class AppSession {
       await _ensureSignedIn();
     }
   }
+
+  /// The address this user signs in with, or null while they are anonymous.
+  String? get email {
+    final address = _auth.currentUser?.email;
+    return address == null || address.isEmpty ? null : address;
+  }
+
+  /// No account yet — everything made so far lives and dies on this device.
+  bool get isAnonymous => _auth.currentUser?.isAnonymous ?? true;
+
+  /// Offer an address, and find out which of the two things that means.
+  ///
+  /// Either way a six-digit code is sent and [confirmEmail] finishes the job.
+  /// Codes rather than links on purpose: a link has to come back into the app
+  /// through a URL scheme and a universal-link entitlement, which is a lot of
+  /// moving parts to get somebody their own trips back.
+  Future<EmailLink> offerEmail(String address) async {
+    try {
+      await _auth.updateUser(UserAttributes(email: address));
+      return EmailLink.linking;
+    } on AuthException catch (error) {
+      if (!_alreadyTaken(error)) rethrow;
+      // Taken, so it cannot be linked to this user — but the person in front
+      // of us is almost certainly its owner, arriving on a second device.
+      // Signing them in is the useful answer; what this device planned in the
+      // meantime is carried across afterwards, deliberately.
+      await _auth.signInWithOtp(email: address);
+      return EmailLink.signingIn;
+    }
+  }
+
+  /// Finish what [offerEmail] started.
+  ///
+  /// Returns the access token of the user being left behind, and null when
+  /// nobody is. It is the only proof that device's trips were ever theirs, so
+  /// it is read *before* the code is verified — after that the session
+  /// belongs to someone else.
+  Future<String?> confirmEmail({
+    required String address,
+    required String code,
+    required EmailLink mode,
+  }) async {
+    if (mode == EmailLink.linking) {
+      // The same user throughout: the id is kept, so every trip stays owned
+      // by the row that already owns it and nothing has to move.
+      await _auth.verifyOTP(email: address, token: code, type: OtpType.emailChange);
+      return null;
+    }
+
+    final leaving = _auth.currentSession?.accessToken;
+    await _auth.verifyOTP(email: address, token: code, type: OtpType.email);
+    return leaving;
+  }
+
+  /// Supabase refuses a second user on one address, which is the signal that
+  /// this is a sign-in rather than a sign-up. Anything else is a real failure
+  /// and is left to the caller to show.
+  static bool _alreadyTaken(AuthException error) =>
+      error.code == 'email_exists' || error.code == 'user_already_exists';
 
   Future<void> _ensureSignedIn() {
     if (_auth.currentSession != null) return Future.value();

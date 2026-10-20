@@ -8,6 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:trippo/api/api_client.dart';
 import 'package:trippo/auth/session.dart';
 
+class _FakeUserResponse extends Fake implements UserResponse {}
+
 class _FakeSession extends Fake implements Session {
   _FakeSession(this.accessToken, {this.expired = false});
 
@@ -56,6 +58,56 @@ class _FakeAuth extends Fake implements GoTrueClient {
     signIns++;
     await gate?.future;
     session = _FakeSession('anon-token-$signIns');
+    return AuthResponse();
+  }
+
+  // --- linking an address ---
+
+  /// Addresses already spoken for, so the fake can refuse one the way the
+  /// real client does.
+  final Set<String> taken = {};
+  String? updatedTo;
+  AuthException? updateUserThrows;
+  String? otpSentTo;
+  final List<({String type, String token})> verified = [];
+
+  @override
+  Future<UserResponse> updateUser(UserAttributes attributes, {String? emailRedirectTo}) async {
+    final address = attributes.email;
+    if (updateUserThrows != null) throw updateUserThrows!;
+    if (address != null && taken.contains(address)) {
+      throw const AuthException('A user with this email address has already been registered',
+          code: 'email_exists');
+    }
+    updatedTo = address;
+    return _FakeUserResponse();
+  }
+
+  @override
+  Future<void> signInWithOtp({
+    String? email,
+    String? phone,
+    String? emailRedirectTo,
+    bool? shouldCreateUser,
+    Map<String, dynamic>? data,
+    String? captchaToken,
+    OtpChannel channel = OtpChannel.sms,
+  }) async {
+    otpSentTo = email;
+  }
+
+  @override
+  Future<AuthResponse> verifyOTP({
+    String? email,
+    String? phone,
+    String? token,
+    required OtpType type,
+    String? redirectTo,
+    String? captchaToken,
+    String? tokenHash,
+  }) async {
+    verified.add((type: type.name, token: token ?? ''));
+    session = _FakeSession('after-${type.name}');
     return AuthResponse();
   }
 
@@ -124,6 +176,65 @@ void main() {
       // somebody their trips.
       expect(auth.signIns, 0);
       expect(auth.session?.accessToken, 'old');
+    });
+  });
+
+  group('Giving the anonymous user a way back in', () {
+    test('a free address links to the user already planning here', () async {
+      final auth = _FakeAuth()..session = _FakeSession('anon');
+      final session = AppSession.withAuth(auth);
+
+      expect(await session.offerEmail('mei@example.com'), EmailLink.linking);
+      expect(auth.updatedTo, 'mei@example.com');
+
+      // Nobody is left behind, because it is the same user throughout — the
+      // id is kept, so every trip stays owned by the row that owns it.
+      final leaving = await session.confirmEmail(
+        address: 'mei@example.com',
+        code: '123456',
+        mode: EmailLink.linking,
+      );
+      expect(leaving, isNull);
+      expect(auth.verified.single.type, 'emailChange');
+    });
+
+    test('a taken address signs in instead, and says who is left behind',
+        () async {
+      // The second-device case: this device has its own anonymous user, and
+      // the address belongs to the account made on the first one.
+      final auth = _FakeAuth()
+        ..session = _FakeSession('this-devices-anon')
+        ..taken.add('mei@example.com');
+      final session = AppSession.withAuth(auth);
+
+      expect(await session.offerEmail('mei@example.com'), EmailLink.signingIn);
+      expect(auth.otpSentTo, 'mei@example.com');
+
+      final leaving = await session.confirmEmail(
+        address: 'mei@example.com',
+        code: '123456',
+        mode: EmailLink.signingIn,
+      );
+
+      // Read before the code was verified: a moment later the session belongs
+      // to somebody else, and with it goes the only proof that this device's
+      // trips were ever its own.
+      expect(leaving, 'this-devices-anon');
+      expect(auth.verified.single.type, 'email');
+    });
+
+    test('a failure that is not a taken address is the caller\'s to show', () async {
+      final auth = _FakeAuth()..session = _FakeSession('anon');
+      auth.updateUserThrows = const AuthException('Email rate limit exceeded',
+          code: 'over_email_send_rate_limit');
+
+      await expectLater(
+        AppSession.withAuth(auth).offerEmail('mei@example.com'),
+        throwsA(isA<AuthException>().having((e) => e.code, 'code', 'over_email_send_rate_limit')),
+      );
+      // Not quietly turned into a sign-in, which would ask for a code that is
+      // never coming.
+      expect(auth.otpSentTo, isNull);
     });
   });
 

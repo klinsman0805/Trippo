@@ -372,6 +372,19 @@ class TrippoApi {
     );
   }
 
+  /// Hand this device's anonymous trips to the account just signed in to.
+  ///
+  /// [fromAccessToken] belongs to the user being left behind — the only proof
+  /// that those trips were ever this device's, and worthless a moment later
+  /// when it expires. Answers how many moved.
+  Future<int> transferTrips(String fromAccessToken) async {
+    final json = await _client.post(
+      '/account/transfer',
+      body: {'from_access_token': fromAccessToken},
+    );
+    return (json['moved'] as num?)?.toInt() ?? 0;
+  }
+
   /// Stops the plan has timed for when the place is shut.
   ///
   /// Cheap — it compares stored hours against the plan and calls nothing
