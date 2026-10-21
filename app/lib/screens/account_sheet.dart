@@ -179,14 +179,18 @@ class _AccountSheetState extends State<_AccountSheet> {
             // phone's trips is the part worth knowing before committing.
             ? 'That address already has an account. Enter the code to sign in '
                 '— anything you have planned on this phone comes with you.'
-            : 'We sent a six-digit code to ${_email.text.trim()}.',
+            : 'We sent a code to ${_email.text.trim()}.',
       ),
       const SizedBox(height: 18),
       TextField(
         controller: _code,
         autofocus: true,
         keyboardType: TextInputType.number,
-        maxLength: 6,
+        // Supabase's OTP length is a project setting, anywhere from six to
+        // ten. Hard-coding six made a real eight-digit code impossible to
+        // type: the field refused the last two and the button never lit. The
+        // server decides how long a code is; this only has to hold it.
+        maxLength: 10,
         textInputAction: TextInputAction.go,
         onChanged: (_) => setState(() {}),
         onSubmitted: (_) => _busy ? null : _confirm(),
@@ -199,7 +203,7 @@ class _AccountSheetState extends State<_AccountSheet> {
         theme: theme,
         label: signingIn ? 'Sign in' : 'Confirm',
         busy: _busy,
-        onTap: _code.text.trim().length == 6 && !_busy ? _confirm : null,
+        onTap: _code.text.trim().length >= 6 && !_busy ? _confirm : null,
       ),
       const SizedBox(height: 4),
       TextButton(

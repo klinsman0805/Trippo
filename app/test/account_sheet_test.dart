@@ -174,7 +174,9 @@ void main() {
       await _type(tester, 'Email', 'mei@example.com');
       await tester.tap(find.text('Send me a code'));
       await tester.pumpAndSettle();
-      await _type(tester, 'Code', '123456');
+      // Eight digits, as a real project configured it — six was an assumption
+      // that made a live code impossible to type.
+      await _type(tester, 'Code', '85757490');
       await tester.tap(find.text('Sign in'));
       await tester.pumpAndSettle();
 
