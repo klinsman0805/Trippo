@@ -38,7 +38,18 @@ class TripListRepository extends ChangeNotifier {
 
   /// Which server features are configured, from /health. Screens should gate
   /// on this rather than discovering a missing key via a 503.
-  Map<String, dynamic> features = const {};
+  ///
+  /// Null until /health answers, which is not the same as everything being
+  /// off. Read as an empty map it said exactly that — every cold start
+  /// announced "Planning is off, no GEMINI_API_KEY set" for the second before
+  /// the first authenticated call returned, which is a claim about somebody's
+  /// server made before asking it.
+  Map<String, dynamic>? features;
+
+  /// Whether /health has answered. Disabling a button while the answer is
+  /// unknown is cautious; telling somebody their planner is misconfigured is
+  /// a statement, and this is what separates the two.
+  bool get featuresKnown => features != null;
 
   Future<void> load() async {
     trips = const Loading();
@@ -52,9 +63,9 @@ class TripListRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get plannerAvailable => features['planner'] == true;
-  bool get mapsAvailable => features['maps'] == true;
-  bool get flightsAreEstimatesOnly => features['flight_provider'] == 'mock';
+  bool get plannerAvailable => features?['planner'] == true;
+  bool get mapsAvailable => features?['maps'] == true;
+  bool get flightsAreEstimatesOnly => features?['flight_provider'] == 'mock';
 
   Future<Trip> create(
     String title, {

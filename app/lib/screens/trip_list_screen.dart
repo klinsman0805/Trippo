@@ -440,6 +440,12 @@ class _FeatureNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = WayfareTheme.of(context);
+
+    // Nothing to say until the server has said it. The flags read false while
+    // unknown, which is the right answer for gating a button and the wrong
+    // one for a sentence beginning "Planning is off".
+    if (!repo.featuresKnown) return const SizedBox.shrink();
+
     final warnings = <String>[
       // Name the key the server actually reads. This said ANTHROPIC_API_KEY
       // long after the planner moved to Gemini, which would send anyone
