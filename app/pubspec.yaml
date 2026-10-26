@@ -44,6 +44,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  # Generates the iOS and Android icon sets from one 1024 source. Dev-only:
+  # it runs once and writes files, and nothing imports it.
+  flutter_launcher_icons: ^0.14.1
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -92,3 +96,20 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# The app icon, from the logo kit. Regenerate after changing the PNGs:
+#
+#   dart run flutter_launcher_icons
+#
+# iOS masks the corners itself, so its source is full-bleed with no rounding.
+# Android composes its own: the terracotta behind, the hippo on a transparent
+# foreground inside the safe zone, so the launcher can crop it to whatever
+# shape the device uses without taking an ear off.
+flutter_launcher_icons:
+  image_path: "assets/brand/trippo-app-icon-1024.png"
+  ios: true
+  # The App Store rejects an icon with an alpha channel.
+  remove_alpha_ios: true
+  android: true
+  adaptive_icon_background: "#B8543A"
+  adaptive_icon_foreground: "assets/brand/trippo-app-icon-foreground-1024.png"
