@@ -5,3 +5,11 @@ data/
 *.log
 .DS_Store
 *.tmp
+
+# Renders and archives Claude Design produced. Reproducible from
+# brand/logo/animation/trippo-logo-animation.html, and large.
+Claude outputs/
+
+# The logo lives in app/lib/design/trippo_logo.dart, with fixes the kit
+# shipped without. A second copy here would be the stale one.
+brand/logo/flutter/

@@ -1,0 +1,59 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Trippo logo animation (reference)</title>
+<!-- Reference implementation of the logo animation: CSS keyframes on a 6 s loop.
+     The Flutter version in ../flutter/trippo_logo.dart follows the same timeline. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif&display=swap">
+<style>
+/* Instrument Serif comes from Google Fonts (link above). */
+html,body{margin:0;background:transparent}
+.stage{width:1920px;height:1080px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:42px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+.bg{background:#f4efe6}
+.tp-rise{animation:tp-rise 6s cubic-bezier(.3,1.4,.5,1) infinite}
+.tp-blink{transform-box:fill-box;transform-origin:center;animation:tp-blink 6s ease-in-out infinite}
+.tp-earl,.tp-earr{transform-box:fill-box;transform-origin:50% 100%;animation:tp-ear 6s ease-in-out infinite}
+.tp-earr{animation-delay:.08s;animation-fill-mode:both}
+.tp-wave{animation:tp-wave 1.5s linear infinite}
+.tp-ripple{transform-box:fill-box;transform-origin:center;animation:tp-ripple 6s ease-out infinite}
+.tp-dots{animation:tp-dots 6s ease-in-out infinite}
+.tp-l{display:inline-block;animation:tp-word 6s cubic-bezier(.2,.9,.3,1.2) infinite both}
+.tp-tag{animation:tp-tag 6s ease-out infinite}
+@keyframes tp-rise{0%{transform:translateY(72px)}6%{transform:translateY(72px)}18%{transform:translateY(0)}84%{transform:translateY(0)}94%,100%{transform:translateY(72px)}}
+@keyframes tp-blink{0%,42%,48%,100%{transform:scaleY(1)}45%{transform:scaleY(.08)}}
+@keyframes tp-ear{0%,56%,70%,100%{transform:rotate(0)}59%{transform:rotate(-16deg)}63%{transform:rotate(12deg)}67%{transform:rotate(-6deg)}}
+@keyframes tp-wave{from{transform:translateX(0)}to{transform:translateX(-32px)}}
+@keyframes tp-ripple{0%,8%{transform:scale(.3);opacity:0}12%{opacity:.6}30%,100%{transform:scale(1.6);opacity:0}}
+@keyframes tp-dots{0%,22%{opacity:0}32%,84%{opacity:.55}92%,100%{opacity:0}}
+@keyframes tp-word{0%,20%{opacity:0;transform:translateY(42px)}30%,84%{opacity:1;transform:translateY(0)}91%,100%{opacity:0;transform:translateY(0)}}
+@keyframes tp-tag{0%,34%{opacity:0;transform:translateY(12px)}42%,82%{opacity:1;transform:translateY(0)}90%,100%{opacity:0}}
+</style></head>
+<body>
+<div class="stage bg" id="stage">
+<div style="display:flex;align-items:center;gap:36px">
+<svg viewBox="0 0 120 120" width="300" height="300">
+<defs><clipPath id="tp-above"><rect x="0" y="0" width="120" height="84"></rect></clipPath></defs>
+<ellipse class="tp-ripple" cx="60" cy="88" rx="44" ry="7" fill="none" stroke="#b8543a" stroke-width="2"></ellipse>
+<g clip-path="url(#tp-above)"><g class="tp-rise">
+<ellipse class="tp-earl" cx="37" cy="27" rx="9" ry="10" fill="#b8543a"></ellipse>
+<ellipse class="tp-earr" cx="83" cy="27" rx="9" ry="10" fill="#b8543a"></ellipse>
+<ellipse cx="60" cy="50" rx="32" ry="22" fill="#b8543a"></ellipse>
+<circle cx="45" cy="38" r="12" fill="#b8543a"></circle>
+<circle cx="75" cy="38" r="12" fill="#b8543a"></circle>
+<path d="M20 84 V76 a22 22 0 0 1 22 -22 h36 a22 22 0 0 1 22 22 V84 Z" fill="#b8543a"></path>
+<ellipse cx="36" cy="26" rx="4" ry="5" fill="#8e3d28"></ellipse>
+<ellipse cx="84" cy="26" rx="4" ry="5" fill="#8e3d28"></ellipse>
+<g class="tp-blink">
+<circle cx="45" cy="38" r="6.5" fill="#fffdf9"></circle><circle cx="46.5" cy="39" r="3.3" fill="#241f1a"></circle>
+<circle cx="75" cy="38" r="6.5" fill="#fffdf9"></circle><circle cx="76.5" cy="39" r="3.3" fill="#241f1a"></circle>
+</g>
+<ellipse cx="48" cy="68" rx="4.5" ry="3.5" fill="#8e3d28"></ellipse>
+<ellipse cx="72" cy="68" rx="4.5" ry="3.5" fill="#8e3d28"></ellipse>
+</g></g>
+<g class="tp-wave"><path d="M-28 90 q8 -6 16 0 t16 0 t16 0 t16 0 t16 0 t16 0 t16 0 t16 0 t16 0 t16 0 t16 0" fill="none" stroke="#b8543a" stroke-width="5" stroke-linecap="round"></path></g>
+<path class="tp-dots" d="M30 106 h60" fill="none" stroke="#b8543a" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 12"></path>
+</svg>
+<span style="font-family:'Instrument Serif',Georgia,serif;font-size:234px;line-height:1;letter-spacing:-0.01em;color:#241f1a"><span class="tp-l">T</span><span class="tp-l" style="animation-delay:.05s">r</span><span class="tp-l" style="animation-delay:.1s">i</span><span class="tp-l" style="animation-delay:.15s">p</span><span class="tp-l" style="animation-delay:.2s">p</span><span class="tp-l" style="animation-delay:.25s">o</span></span>
+</div>
+<p class="tp-tag" style="margin:0;font-size:26px;color:#6b6158">Plan the trip with a hippo guide</p>
+</div>
+</body></html>
