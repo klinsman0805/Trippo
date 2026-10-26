@@ -66,6 +66,11 @@ class _LandingScreenState extends State<LandingScreen> {
             child: TrippoLogoAnimation(
               height: 132,
               axis: Axis.vertical,
+              // Quieter than the kit's ratio, which is drawn for the name
+              // sitting beside the hippo. Stacked beneath it, the name is
+              // already read second by position and does not need the size
+              // as well.
+              wordScale: 0.58,
               loop: false,
               tagline: 'Your personal trip advisor',
               onIntroComplete: () {

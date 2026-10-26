@@ -117,6 +117,7 @@ class TrippoLogo extends StatelessWidget {
     this.height = 64,
     this.onDark = false,
     this.axis = Axis.horizontal,
+    this.wordScale = 1,
   });
 
   /// Height of the mark; the wordmark is sized from it (136 / 176).
@@ -130,6 +131,9 @@ class TrippoLogo extends StatelessWidget {
   /// has nothing else on it; the kit's spacing holds either way, with the
   /// same gap turned through ninety degrees.
   final Axis axis;
+  /// Shrinks the wordmark against the kit's ratio. 1 is the lockup
+  /// as drawn.
+  final double wordScale;
 
   @override
   Widget build(BuildContext context) {
@@ -147,20 +151,29 @@ class TrippoLogo extends StatelessWidget {
             width: axis == Axis.horizontal ? height * 22 / 176 : 0,
             height: axis == Axis.vertical ? height * 22 / 176 : 0,
           ),
-          Text('Trippo', style: _wordStyle(height, onDark)),
+          Text('Trippo', style: _wordStyle(height, onDark, scale: wordScale)),
         ],
       ),
     );
   }
 }
 
-TextStyle _wordStyle(double markHeight, bool onDark) => GoogleFonts.getFont(
-      'Instrument Serif',
-      fontSize: markHeight * 136 / 176,
-      height: 1,
-      letterSpacing: markHeight * 136 / 176 * -0.01,
-      color: onDark ? TrippoBrandColors.cream : TrippoBrandColors.ink,
-    );
+/// The kit's ratio — the wordmark is 136/176 of the mark's height — with a
+/// scale for the cases that want it quieter.
+///
+/// That ratio is specified for the side-by-side lockup, where the name has to
+/// hold its own beside the hippo. Stacked under it the name is read second by
+/// position already, and at full size it shouts.
+TextStyle _wordStyle(double markHeight, bool onDark, {double scale = 1}) {
+  final size = markHeight * 136 / 176 * scale;
+  return GoogleFonts.getFont(
+    'Instrument Serif',
+    fontSize: size,
+    height: 1,
+    letterSpacing: size * -0.01,
+    color: onDark ? TrippoBrandColors.cream : TrippoBrandColors.ink,
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Animated logo
@@ -182,6 +195,7 @@ class TrippoLogoAnimation extends StatefulWidget {
     this.showTagline = true,
     this.tagline = 'Plan the trip with a hippo guide',
     this.axis = Axis.horizontal,
+    this.wordScale = 1,
     this.onIntroComplete,
   });
 
@@ -196,6 +210,9 @@ class TrippoLogoAnimation extends StatefulWidget {
   /// same either way — the letters still arrive one after another, they just
   /// arrive on their own line.
   final Axis axis;
+  /// Shrinks the wordmark against the kit's ratio. 1 is the lockup
+  /// as drawn.
+  final double wordScale;
 
   /// Length of one full loop.
   static const cycle = Duration(seconds: 6);
@@ -273,7 +290,7 @@ class _TrippoLogoAnimationState extends State<TrippoLogoAnimation>
   @override
   Widget build(BuildContext context) {
     final h = widget.height;
-    final style = _wordStyle(h, false);
+    final style = _wordStyle(h, false, scale: widget.wordScale);
     final tagStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
               fontSize: h * 17 / 200,
               color: TrippoBrandColors.muted,
@@ -289,7 +306,7 @@ class _TrippoLogoAnimationState extends State<TrippoLogoAnimation>
           child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TrippoLogo(height: h, axis: widget.axis),
+            TrippoLogo(height: h, axis: widget.axis, wordScale: widget.wordScale),
             if (widget.showTagline) ...[
               SizedBox(height: h * 0.14),
               Text(widget.tagline, style: tagStyle),
