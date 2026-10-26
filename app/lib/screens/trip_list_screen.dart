@@ -9,6 +9,7 @@ import '../design/widgets.dart';
 import '../models/trip.dart';
 import '../state/trip_repository.dart';
 import 'account_sheet.dart';
+import 'entry_screen.dart';
 import 'wayfare/currency_picker.dart';
 import 'wayfare/formatting.dart';
 
@@ -29,7 +30,11 @@ class TripListScreen extends StatefulWidget {
 
   /// Null without Supabase, which is when there is no account to offer.
   final AppSession? session;
-  final void Function(BuildContext context, String tripId) onOpenTrip;
+  /// [intent] is the door a new trip came through, and null for a trip
+  /// opened from the list — that one is already underway and has nowhere
+  /// particular to land.
+  final void Function(BuildContext context, String tripId, TripIntent? intent)
+      onOpenTrip;
 
   @override
   State<TripListScreen> createState() => _TripListScreenState();
@@ -61,6 +66,13 @@ class _TripListScreenState extends State<TripListScreen> {
   /// could not be reached at all. The place you are going is the one thing the
   /// planner cannot work without, so it is the one thing this asks for.
   Future<void> _createTrip() async {
+    // What they have, before where they are going. The destination is the
+    // same question either way; what changes is where it lands them.
+    final intent = await Navigator.of(context).push<TripIntent>(
+      MaterialPageRoute(builder: (_) => const EntryScreen()),
+    );
+    if (intent == null || !mounted) return;
+
     final answer = await showDialog<({String destination, String currency})>(
       context: context,
       builder: (ctx) => const _NewTripDialog(),
@@ -72,7 +84,7 @@ class _TripListScreenState extends State<TripListScreen> {
       destinations: [answer.destination],
       currency: answer.currency,
     );
-    if (mounted) widget.onOpenTrip(context, trip.id);
+    if (mounted) widget.onOpenTrip(context, trip.id, intent);
   }
 
   @override
@@ -198,7 +210,7 @@ class _TripListScreenState extends State<TripListScreen> {
             const SizedBox(height: WayfareSpace.cardGap),
         itemBuilder: (context, i) => _TripTile(
           trip: value[i],
-          onOpen: () => widget.onOpenTrip(context, value[i].id),
+          onOpen: () => widget.onOpenTrip(context, value[i].id, null),
           onDelete: () => _repo.delete(value[i].id),
         ),
       ),

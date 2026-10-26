@@ -74,10 +74,14 @@ void main() {
         (tester) async {
       await wrap(
         tester,
-        TripListScreen(api: stubbedApi(), onOpenTrip: (_, _) {}),
+        TripListScreen(api: stubbedApi(), onOpenTrip: (_, _, _) {}),
       );
 
       await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      // A door first: what they have, before where they are going. Plain
+      // destination is the one that behaves as creating a trip always did.
+      await tester.tap(find.text('Just a destination'));
       await tester.pumpAndSettle();
 
       expect(find.text('Where are you going?'), findsOneWidget);
@@ -101,10 +105,14 @@ void main() {
     testWidgets('will not create one with nowhere to go', (tester) async {
       await wrap(
         tester,
-        TripListScreen(api: stubbedApi(), onOpenTrip: (_, _) {}),
+        TripListScreen(api: stubbedApi(), onOpenTrip: (_, _, _) {}),
       );
 
       await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      // A door first: what they have, before where they are going. Plain
+      // destination is the one that behaves as creating a trip always did.
+      await tester.tap(find.text('Just a destination'));
       await tester.pumpAndSettle();
 
       final create = tester.widget<TextButton>(
@@ -126,10 +134,14 @@ void main() {
         (tester) async {
       await wrap(
         tester,
-        TripListScreen(api: stubbedApi(), onOpenTrip: (_, _) {}),
+        TripListScreen(api: stubbedApi(), onOpenTrip: (_, _, _) {}),
       );
 
       await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      // A door first: what they have, before where they are going. Plain
+      // destination is the one that behaves as creating a trip always did.
+      await tester.tap(find.text('Just a destination'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'Hanoi');
       await tester.pumpAndSettle();

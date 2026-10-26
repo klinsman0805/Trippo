@@ -119,12 +119,14 @@ class TrippoApp extends StatelessWidget {
           : TripListScreen(
               session: session,
               api: api,
-              onOpenTrip: (context, tripId) => Navigator.of(context).push(
+              onOpenTrip: (context, tripId, intent) =>
+                  Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => WayfareShell(
                     api: api,
                     tripId: tripId,
                     platformOverride: platformOverride,
+                    openOn: intent,
                   ),
                 ),
               ),

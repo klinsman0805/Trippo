@@ -43,7 +43,7 @@ Future<void> pumpList(WidgetTester tester, TrippoApi api) async {
         platform: WayfarePlatform.ios,
         child: child ?? const SizedBox.shrink(),
       ),
-      home: TripListScreen(api: api, onOpenTrip: (_, _) {}),
+      home: TripListScreen(api: api, onOpenTrip: (_, _, _) {}),
     ),
   );
 }

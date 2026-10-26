@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' hide TimeOfDay;
 import 'package:flutter/scheduler.dart';
 
 import '../../api/trippo_api.dart';
+import '../entry_screen.dart';
 import '../../design/features.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
@@ -40,10 +41,16 @@ class WayfareShell extends StatefulWidget {
     required this.api,
     required this.tripId,
     this.platformOverride,
+    this.openOn,
   });
 
   final TrippoApi api;
   final String tripId;
+
+  /// What the trip was started for, when it was started from the entry
+  /// screen. Acted on once, after the first load — the sheet needs a trip
+  /// behind it, and the flights screen needs somewhere to come back to.
+  final TripIntent? openOn;
 
   /// Forces a platform dress. Null follows the host OS.
   final WayfarePlatform? platformOverride;
@@ -63,7 +70,23 @@ class _WayfareShellState extends State<WayfareShell> {
     // The short-day band links back to the decision that caused it — when
     // there is a search to send them to.
     if (WayfareFeatures.flightSearch) _controller.onSeeOtherFlights = _openFlights;
-    _controller.load();
+    _controller.load().then((_) => _openOnArrival());
+  }
+
+  /// Opens whatever the entry screen's door promised, once there is a trip
+  /// behind it. Both doors need the load first: the import sheet reads the
+  /// controller, and the flights screen writes dates back to it.
+  void _openOnArrival() {
+    if (!mounted) return;
+    switch (widget.openOn) {
+      case TripIntent.saved:
+        _openImport();
+      case TripIntent.flight:
+        _openFlights();
+      case TripIntent.scratch:
+      case null:
+        break;
+    }
   }
 
   @override

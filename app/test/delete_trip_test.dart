@@ -56,7 +56,7 @@ void main() {
           platform: WayfarePlatform.ios,
           child: child ?? const SizedBox.shrink(),
         ),
-        home: TripListScreen(api: api, onOpenTrip: (_, _) {}),
+        home: TripListScreen(api: api, onOpenTrip: (_, _, _) {}),
       ),
     );
     await tester.pumpAndSettle();
