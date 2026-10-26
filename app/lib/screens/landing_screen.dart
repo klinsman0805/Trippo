@@ -71,6 +71,10 @@ class _LandingScreenState extends State<LandingScreen> {
               // already read second by position and does not need the size
               // as well.
               wordScale: 0.58,
+              // The waterline keeps moving; the ring that spreads as the
+              // hippo surfaces does not. Two waves at once, one of them
+              // faster, pull the eye off the thing that is arriving.
+              ripple: false,
               loop: false,
               tagline: 'Your personal trip advisor',
               onIntroComplete: () {

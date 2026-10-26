@@ -149,7 +149,7 @@ class TrippoLogo extends StatelessWidget {
           // The kit's gap, turned to match the direction the pieces run in.
           SizedBox(
             width: axis == Axis.horizontal ? height * 22 / 176 : 0,
-            height: axis == Axis.vertical ? height * 22 / 176 : 0,
+            height: axis == Axis.vertical ? height * _stackedGap / 176 : 0,
           ),
           Text('Trippo', style: _wordStyle(height, onDark, scale: wordScale)),
         ],
@@ -157,6 +157,13 @@ class TrippoLogo extends StatelessWidget {
     );
   }
 }
+
+/// Smaller than the kit's 22, for a reason that only applies stacked: the
+/// mark is a square box whose lower part is waterline and route dots, so a
+/// gap measured from the box's edge starts well below the artwork. Side by
+/// side that empty strip sits beside the name and nobody notices. Underneath,
+/// it stacks on top of the gap and the two drift apart.
+const double _stackedGap = 6;
 
 /// The kit's ratio — the wordmark is 136/176 of the mark's height — with a
 /// scale for the cases that want it quieter.
@@ -196,6 +203,7 @@ class TrippoLogoAnimation extends StatefulWidget {
     this.tagline = 'Plan the trip with a hippo guide',
     this.axis = Axis.horizontal,
     this.wordScale = 1,
+    this.ripple = true,
     this.onIntroComplete,
   });
 
@@ -213,6 +221,14 @@ class TrippoLogoAnimation extends StatefulWidget {
   /// Shrinks the wordmark against the kit's ratio. 1 is the lockup
   /// as drawn.
   final double wordScale;
+
+  /// Whether the ring of water spreads as the hippo breaks the surface.
+  ///
+  /// The kit fires one at 8–30%, growing from 0.3x to 1.6x. It reads as a
+  /// second, faster wave crossing the waterline that is already moving, and
+  /// the two are hard to take at once — the eye goes to the ring instead of
+  /// the hippo, which is the thing arriving.
+  final bool ripple;
 
   /// Length of one full loop.
   static const cycle = Duration(seconds: 6);
@@ -331,7 +347,7 @@ class _TrippoLogoAnimationState extends State<TrippoLogoAnimation>
         animation: Listenable.merge([_main, _wave]),
         builder: (context, _) {
           final t = _main.value;
-          final pose = _MarkPose.at(t, _wave.value);
+          final pose = _MarkPose.at(t, _wave.value, ripple: widget.ripple);
           const letters = 'Trippo';
           final mark = CustomPaint(
             size: Size.square(h),
@@ -352,7 +368,7 @@ class _TrippoLogoAnimationState extends State<TrippoLogoAnimation>
           ];
           final gap = SizedBox(
             width: widget.axis == Axis.horizontal ? h * 22 / 176 : 0,
-            height: widget.axis == Axis.vertical ? h * 22 / 176 : 0,
+            height: widget.axis == Axis.vertical ? h * _stackedGap / 176 : 0,
           );
 
           return Column(
@@ -489,7 +505,9 @@ class _MarkPose {
 
   static const _bounce = Cubic(0.3, 1.4, 0.5, 1);
 
-  factory _MarkPose.at(double t, double wave) {
+  /// [ripple] off keeps the ring at zero opacity, so the painter skips it.
+  /// The waterline is untouched — it goes on scrolling.
+  factory _MarkPose.at(double t, double wave, {bool ripple = true}) {
     // Rise 6%–18%, hold, sink 84%–94%.
     final double sink;
     if (t < 0.84) {
@@ -522,7 +540,7 @@ class _MarkPose {
       rightEar: _ear(_wrap(t - 0.08 / 6)),
       wave: wave,
       rippleScale: _lerp(0.3, 1.6, rp),
-      rippleOpacity: t < 0.08 ? 0 : rippleOpacity,
+      rippleOpacity: !ripple || t < 0.08 ? 0 : rippleOpacity,
       dotsOpacity: dots,
       scrollingWave: true,
     );
