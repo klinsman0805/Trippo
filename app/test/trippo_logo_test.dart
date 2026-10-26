@@ -51,6 +51,29 @@ void main() {
   });
 
   group('The animation', () {
+    testWidgets('fits the width it is given rather than overflowing it',
+        (tester) async {
+      // A height of 220 made a lockup wider than a 402pt phone, and the
+      // caller had no way to know: the width follows the height through the
+      // mark and the wordmark, and nothing said so.
+      tester.view.physicalSize = const Size(402, 874);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: Center(child: TrippoLogoAnimation(height: 220))),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byType(TrippoLogoAnimation)).width,
+        lessThanOrEqualTo(402),
+      );
+    });
+
     testWidgets('plays once and says when the intro is done', (tester) async {
       var done = false;
       await tester.pumpWidget(

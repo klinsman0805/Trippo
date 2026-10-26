@@ -267,7 +267,8 @@ class _TrippoLogoAnimationState extends State<TrippoLogoAnimation>
         label: 'Trippo',
         container: true,
         excludeSemantics: true,
-        child: Column(
+        child: _FitWidth(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TrippoLogo(height: h),
@@ -276,6 +277,7 @@ class _TrippoLogoAnimationState extends State<TrippoLogoAnimation>
               Text(widget.tagline, style: tagStyle),
             ],
           ],
+          ),
         ),
       );
     }
@@ -284,7 +286,13 @@ class _TrippoLogoAnimationState extends State<TrippoLogoAnimation>
       label: 'Trippo',
       container: true,
       excludeSemantics: true,
-      child: AnimatedBuilder(
+      // Height drives width here — the mark is square and the wordmark is
+      // sized from it — so a height that looks reasonable can be wider than
+      // the phone. 220 on a 402pt screen overflowed by 226. Scaling down
+      // inside the space it is given makes [height] the size it would like,
+      // rather than a trap the caller has to compute around.
+      child: _FitWidth(
+        child: AnimatedBuilder(
         animation: Listenable.merge([_main, _wave]),
         builder: (context, _) {
           final t = _main.value;
@@ -330,6 +338,7 @@ class _TrippoLogoAnimationState extends State<TrippoLogoAnimation>
             ],
           );
         },
+        ),
       ),
     );
   }
@@ -699,4 +708,21 @@ class _PinPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PinPainter old) => false;
+}
+
+/// Shrinks its child to fit the width it is given, never enlarging it.
+///
+/// The logo is laid out from a height, and its width follows. Without this a
+/// caller has to know how wide a given height turns out to be, and gets a
+/// yellow-striped overflow when the guess is wrong.
+class _FitWidth extends StatelessWidget {
+  const _FitWidth({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => FittedBox(
+        fit: BoxFit.scaleDown,
+        child: child,
+      );
 }
