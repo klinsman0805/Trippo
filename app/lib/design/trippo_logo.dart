@@ -110,12 +110,13 @@ class TrippoPin extends StatelessWidget {
   }
 }
 
-/// Mark + "Trippo" wordmark, side by side.
+/// Mark + "Trippo" wordmark, side by side or stacked.
 class TrippoLogo extends StatelessWidget {
   const TrippoLogo({
     super.key,
     this.height = 64,
     this.onDark = false,
+    this.axis = Axis.horizontal,
   });
 
   /// Height of the mark; the wordmark is sized from it (136 / 176).
@@ -124,17 +125,28 @@ class TrippoLogo extends StatelessWidget {
   /// Cream wordmark for dark backgrounds.
   final bool onDark;
 
+  /// Side by side, as the lockup in the kit, or stacked with the name under
+  /// the hippo. Stacked suits a screen that is taller than it is wide and
+  /// has nothing else on it; the kit's spacing holds either way, with the
+  /// same gap turned through ninety degrees.
+  final Axis axis;
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
       label: 'Trippo',
       container: true,
       excludeSemantics: true,
-      child: Row(
+      child: Flex(
+        direction: axis,
         mainAxisSize: MainAxisSize.min,
         children: [
           TrippoMark(size: height, semanticLabel: null),
-          SizedBox(width: height * 22 / 176),
+          // The kit's gap, turned to match the direction the pieces run in.
+          SizedBox(
+            width: axis == Axis.horizontal ? height * 22 / 176 : 0,
+            height: axis == Axis.vertical ? height * 22 / 176 : 0,
+          ),
           Text('Trippo', style: _wordStyle(height, onDark)),
         ],
       ),
@@ -169,6 +181,7 @@ class TrippoLogoAnimation extends StatefulWidget {
     this.loop = true,
     this.showTagline = true,
     this.tagline = 'Plan the trip with a hippo guide',
+    this.axis = Axis.horizontal,
     this.onIntroComplete,
   });
 
@@ -178,6 +191,11 @@ class TrippoLogoAnimation extends StatefulWidget {
   final bool showTagline;
   final String tagline;
   final VoidCallback? onIntroComplete;
+
+  /// Side by side, or the name stacked under the hippo. The timeline is the
+  /// same either way — the letters still arrive one after another, they just
+  /// arrive on their own line.
+  final Axis axis;
 
   /// Length of one full loop.
   static const cycle = Duration(seconds: 6);
@@ -271,7 +289,7 @@ class _TrippoLogoAnimationState extends State<TrippoLogoAnimation>
           child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TrippoLogo(height: h),
+            TrippoLogo(height: h, axis: widget.axis),
             if (widget.showTagline) ...[
               SizedBox(height: h * 0.14),
               Text(widget.tagline, style: tagStyle),
@@ -298,30 +316,43 @@ class _TrippoLogoAnimationState extends State<TrippoLogoAnimation>
           final t = _main.value;
           final pose = _MarkPose.at(t, _wave.value);
           const letters = 'Trippo';
+          final mark = CustomPaint(
+            size: Size.square(h),
+            painter: _MarkPainter(
+              colors: TrippoMarkColors.standard,
+              pose: pose,
+            ),
+          );
+          final word = [
+            for (var i = 0; i < letters.length; i++)
+              _Letter(
+                letter: letters[i],
+                // Each letter starts 0.05 s after the one before it.
+                t: _wrap(t - i * 0.05 / 6),
+                style: style,
+                rise: h * 28 / 200,
+              ),
+          ];
+          final gap = SizedBox(
+            width: widget.axis == Axis.horizontal ? h * 22 / 176 : 0,
+            height: widget.axis == Axis.vertical ? h * 22 / 176 : 0,
+          );
+
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CustomPaint(
-                    size: Size.square(h),
-                    painter: _MarkPainter(
-                      colors: TrippoMarkColors.standard,
-                      pose: pose,
-                    ),
-                  ),
-                  SizedBox(width: h * 22 / 176),
-                  for (var i = 0; i < letters.length; i++)
-                    _Letter(
-                      letter: letters[i],
-                      // Each letter starts 0.05 s after the one before it.
-                      t: _wrap(t - i * 0.05 / 6),
-                      style: style,
-                      rise: h * 28 / 200,
-                    ),
-                ],
-              ),
+              // Stacked, the name needs a row of its own under the hippo;
+              // side by side it shares one with it. The letters animate the
+              // same way in both.
+              if (widget.axis == Axis.vertical) ...[
+                mark,
+                gap,
+                Row(mainAxisSize: MainAxisSize.min, children: word),
+              ] else
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [mark, gap, ...word],
+                ),
               if (widget.showTagline) ...[
                 SizedBox(height: h * 0.14),
                 _fadeSlide(
